@@ -106,4 +106,5 @@
 - [x] ICU工具固定源提交与SHA256，构建默认-O、Linux裁剪语言数据并strip；不修改上游包源码。
 - [x] Containerfile改为Alpine 3.24.3底座，继续非root65532、只读根、/data卷与内嵌前端；配置由环境变量提供，容器直接启动。GHCR维持amd64/arm64清单，手动发布SHA标签，版本标签触发版本/latest。
 - [x] 本轮移除Windows后，后端52项及离线契约6项通过；actionlint、PowerShell语法和diff空白检查通过。
-- [ ] 本轮Alpine静态发布构建、本机Podman、完整Linux/macOS Actions及GHCR拉取验收进行中。ARM64 Linux尚未实机运行；旧v0.1.0未改写，本轮尚未新增版本tag。
+- [x] 本机主线静态内嵌构建与ELF检查通过，真实HTTP/SSE、SIGINT/SIGTERM约0.001秒及重启恢复通过。Alpine镜像约72.8MB，实际读取/etc/alpine-release确认为3.24.3；非root/只读根、200KB/2MB HTTP schema、卷恢复及SIGTERM均通过。
+- [ ] 完整Linux/macOS Actions（run41315555177）及新Alpine GHCR拉取验收进行中。ARM64 Linux尚未实机运行；旧v0.1.0未改写，本轮尚未新增版本tag。

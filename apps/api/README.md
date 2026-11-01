@@ -190,4 +190,4 @@ podman run -d --name webdrop --read-only --cap-drop=all --security-opt=no-new-pr
 
 首次访问http://localhost:8080；局域网通过主机实际IP访问。反代HTTPS沿用Host/X-Forwarded-Proto约定，生产加`-e VAPOR_ENV=production`不能代替程序CLI；请在镜像名后指定`serve --env production`。持久卷保存状态/磁盘文件；内存文件仍会随进程退出失效。宿主目录绑定挂载需确保UID65532可写，命名卷由Podman初始化目录权限。
 
-Actions的OCI任务只依赖两个Linux构建，下载本次二进制Artifacts，构建linux/amd64+linux/arm64清单并运行容器HTTP/卷恢复验收。手动构建成功后推送`ghcr.io/greepar/webdrop:sha-<12位提交>`；版本标签触发时另推版本号及latest。已实测发布与匿名拉取`ghcr.io/greepar/webdrop:sha-bf52cc33d2ae`，amd64/arm64清单存在，amd64容器验收通过；ARM64运行仍需相应机器。尚未发布版本标签或latest，实际任务状态见GitHub Actions。macOS双架构由独立任务验收。新的Alpine镜像以本轮Actions发布的SHA标签为准；上面的旧SHA为此前scratch镜像的验收记录。
+Actions的OCI任务只依赖两个Linux构建，下载本次二进制Artifacts，构建linux/amd64+linux/arm64清单并运行容器HTTP/卷恢复验收。手动构建成功后推送`ghcr.io/greepar/webdrop:sha-<12位提交>`；版本标签触发时另推版本号及latest。可用标签见[GHCR镜像版本](https://github.com/greepar/webdrop/pkgs/container/webdrop)。amd64运行容器验收，ARM64执行静态/架构校验，尚未在ARM机器运行；macOS双架构由独立任务验收。
