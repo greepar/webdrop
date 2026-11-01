@@ -105,3 +105,19 @@ if ($IsWindows) {
         [IO.File]::WriteAllText($cookies, $text)
     }
 }
+
+# NIOSSL 2.37.5 Windows port, adapted from apple/swift-nio-ssl#567
+# (22c1c18c48472807e11373a09aa11876314ccb86), retaining upstream Apache-2.0 headers.
+# Scoped to locked dependency source; no certificate-verification bypass.
+if ($IsWindows) {
+    $checkout = Join-Path $ScratchPath 'checkouts/swift-nio-ssl'
+    $patch = Join-Path $PSScriptRoot 'patches/niossl-windows.patch'
+    & git -C $checkout apply --reverse --check $patch 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        & git -C $checkout apply --check $patch
+        if ($LASTEXITCODE -ne 0) { throw 'NIOSSL Windows patch no longer matches the locked dependency.' }
+        Get-ChildItem $checkout -Recurse -File | ForEach-Object { $_.IsReadOnly = $false }
+        & git -C $checkout apply $patch
+        if ($LASTEXITCODE -ne 0) { throw 'Could not apply NIOSSL Windows patch.' }
+    }
+}
