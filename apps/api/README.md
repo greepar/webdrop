@@ -179,6 +179,12 @@ python3 scripts/api-shutdown-smoke.py --binary dist/api/webdrop-linux-x86_64 --v
 
 `Containerfile`使用Alpine 3.24.3底座及Linux静态内嵌程序，默认非root（65532）、8080端口、DATA_DIR=/data。镜像自带只含说明的.env，容器首次启动直接运行，不进入交互配置生成流程；配置通过环境变量传入，/data挂载持久卷。可只读运行根文件系统。
 
+使用本轮已验收的GHCR镜像：
+
+```sh
+podman run -d --name webdrop -p 8080:8080 -v webdrop-data:/data ghcr.io/greepar/webdrop:sha-05979dbc4340
+```
+
 本机验证：
 
 ```sh

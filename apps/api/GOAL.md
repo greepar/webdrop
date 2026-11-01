@@ -97,7 +97,7 @@
 ## GitHub标签发布入口
 
 - [x] release.yml在v*标签推送时构建Linux x86-64/ARM64及macOS ARM64/x86-64，固定Swift6.4.2和Action SHA，执行类型/lint、后端测试、契约检查及原生目标真实HTTP/SSE停机验收；全部构建成功后发布Release文件。手动触发只生成Artifacts。
-- [x] actionlint及diff空白检查通过。实际GitHub runner及发布结果待首次运行验收，ARM64 Linux运行仍需目标机器验证。
+- [x] actionlint及diff空白检查通过；run41315555177的四个平台构建、测试与Alpine OCI发布全部通过。ARM64 Linux运行仍需目标机器验证。
 
 ## Actions、平台范围与Alpine OCI
 
@@ -107,4 +107,5 @@
 - [x] Containerfile改为Alpine 3.24.3底座，继续非root65532、只读根、/data卷与内嵌前端；配置由环境变量提供，容器直接启动。GHCR维持amd64/arm64清单，手动发布SHA标签，版本标签触发版本/latest。
 - [x] 本轮移除Windows后，后端52项及离线契约6项通过；actionlint、PowerShell语法和diff空白检查通过。
 - [x] 本机主线静态内嵌构建与ELF检查通过，真实HTTP/SSE、SIGINT/SIGTERM约0.001秒及重启恢复通过。Alpine镜像约72.8MB，实际读取/etc/alpine-release确认为3.24.3；非root/只读根、200KB/2MB HTTP schema、卷恢复及SIGTERM均通过。
-- [ ] 完整Linux/macOS Actions（run41315555177）及新Alpine GHCR拉取验收进行中。ARM64 Linux尚未实机运行；旧v0.1.0未改写，本轮尚未新增版本tag。
+- [x] 完整Actions run41315555177全部成功：Linux x86-64/ARM64、macOS Intel/ARM64及Alpine OCI。新镜像ghcr.io/greepar/webdrop:sha-05979dbc4340已发布amd64/arm64清单；使用空认证文件匿名拉取成功，拉取后的amd64镜像再次通过本机Podman完整HTTP schema、Alpine版本、卷恢复与SIGTERM验收。
+- 未验证/限制：ARM64 Linux尚未实机运行；macOS最低26，不承诺旧版本系统。Windows分支为未完成的移植快照，主线不发布Windows成品。旧v0.1.0未改写，本轮未新增版本tag；手动Actions不创建GitHub Release。
