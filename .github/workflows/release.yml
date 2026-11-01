@@ -4,11 +4,6 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Existing version tag to build and publish (empty builds current ref only)
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -37,11 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ github.ref }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm
+      - name: Import Swift signing keys
+        if: runner.os == 'Linux'
+        run: curl --fail --location https://www.swift.org/keys/all-keys.asc | gpg --import
       - uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3 (Swiftly)
         with:
           swift-version: '6.4.2'
@@ -50,9 +48,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm icu-devtools
-      - name: Install PowerShell on macOS
-        if: runner.os == 'macOS'
-        run: brew install --cask powershell
+      - name: Verify PowerShell
+        run: pwsh --version
       - name: Install Static Linux SDK
         if: runner.os == 'Linux'
         shell: pwsh
@@ -87,10 +84,45 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  windows:
+    name: Windows PowerShell and frontend
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npm run check
+          if ($LASTEXITCODE -ne 0) { throw 'Type check failed' }
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { throw 'Lint failed' }
+          ./scripts/embed-web.ps1
+          $errorsFound = @()
+          Get-ChildItem scripts -Filter '*.ps1' | ForEach-Object {
+            $tokens = $null; $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
+            $errorsFound += $errors
+          }
+          if ($errorsFound.Count) { throw ($errorsFound | Out-String) }
+          if (-not (Test-Path apps/api/Sources/WebdropAPI/Generated/EmbeddedWebAssets.generated.swift)) { throw 'Embedding failed' }
+          try {
+            ./scripts/build-api.ps1
+            throw 'Expected unsupported native Windows target to be rejected'
+          } catch {
+            if ($_.Exception.Message -notmatch 'Native Windows releases are not supported') { throw }
+          }
+          Write-Host 'Windows frontend, PowerShell parsing/embedding, and unsupported-target diagnostic passed.'
+
   publish:
     name: Publish release assets
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/') || inputs.release_tag != ''
+    needs: [build, windows]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -104,7 +136,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --title "WebDrop $RELEASE_TAG" --generate-notes
