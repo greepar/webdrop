@@ -24,7 +24,7 @@ final class StoreLock: @unchecked Sendable {
         let handle = path.withCString(encodedAs: UTF16.self) { pointer in
             CreateFileW(
                 pointer,
-                DWORD(GENERIC_READ | GENERIC_WRITE),
+                DWORD(GENERIC_READ) | DWORD(GENERIC_WRITE),
                 0,
                 nil,
                 DWORD(OPEN_ALWAYS),
