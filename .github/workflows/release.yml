@@ -71,7 +71,16 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm icu-devtools
+          sudo apt-get install -y clang llvm make g++
+          curl -fLsS https://github.com/unicode-org/icu/archive/ddc6b66926bfac6036144ca9902992a0d6d50af9.tar.gz -o "$RUNNER_TEMP/icu.tar.gz"
+          mkdir "$RUNNER_TEMP/icu-source"
+          tar xzf "$RUNNER_TEMP/icu.tar.gz" -C "$RUNNER_TEMP/icu-source" --strip-components=1
+          cd "$RUNNER_TEMP/icu-source/icu4c/source"
+          ./configure --prefix="$RUNNER_TEMP/icu-tools" --disable-tests --disable-samples --disable-extras --disable-shared --enable-static
+          make -j3
+          make install
+          echo "$RUNNER_TEMP/icu-tools/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/icu-tools/sbin" >> "$GITHUB_PATH"
       - name: Verify PowerShell
         run: pwsh --version
       - name: Install Static Linux SDK
@@ -83,6 +92,12 @@ jobs:
       - run: npm ci
       - name: Check frontend
         run: npm run check && npm run lint
+      - name: Resolve and patch platform dependencies
+        shell: pwsh
+        run: |
+          swift package --package-path apps/api resolve --force-resolved-versions
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed' }
+          ./scripts/patch-swift-dependencies.ps1 -ScratchPath apps/api/.build
       - name: Test backend
         run: swift test --package-path apps/api -j 3
       - name: Build embedded release
@@ -109,8 +124,18 @@ jobs:
           compression-level: 0
 
   windows:
-    name: Build windows-x86_64
-    runs-on: windows-2025
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86_64
+            runner: windows-2025
+            installer_suffix: windows10
+          - target: windows-arm64
+            runner: windows-11-arm
+            installer_suffix: windows10-arm64
     timeout-minutes: 60
     defaults:
       run:
@@ -122,9 +147,11 @@ jobs:
           node-version: '24'
           cache: npm
       - name: Install Swift for Windows
+        env:
+          INSTALLER_SUFFIX: ${{ matrix.installer_suffix }}
         run: |
           $installer = Join-Path $env:RUNNER_TEMP 'swift-installer.exe'
-          Invoke-WebRequest 'https://download.swift.org/swift-6.4.2-release/windows10/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-windows10.exe' -OutFile $installer
+          Invoke-WebRequest "https://download.swift.org/swift-6.4.2-release/$env:INSTALLER_SUFFIX/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-$env:INSTALLER_SUFFIX.exe" -OutFile $installer
           $result = Start-Process $installer -ArgumentList '/quiet', '/norestart', '/log', "$env:RUNNER_TEMP/swift-install.log" -Wait -PassThru
           if ($result.ExitCode -notin @(0, 3010)) { throw "Swift installation failed: $($result.ExitCode)" }
           foreach ($scope in @('Machine', 'User')) {
@@ -142,15 +169,19 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
       - name: Build Windows release
-        run: ./scripts/build-api.ps1 -Target windows-x86_64 -Jobs 3
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: ./scripts/build-api.ps1 -Target $env:RELEASE_TARGET -Jobs 3
       - name: Smoke Windows release
-        run: python scripts/api-windows-smoke.py --binary dist/api/windows-x86_64/webdrop.exe
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: python scripts/api-windows-smoke.py --binary "dist/api/$env:RELEASE_TARGET/webdrop.exe"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: webdrop-windows-x86_64
+          name: webdrop-${{ matrix.target }}
           path: |
-            dist/api/webdrop-windows-x86_64.zip
-            dist/api/webdrop-windows-x86_64.zip.json
+            dist/api/webdrop-${{ matrix.target }}.zip
+            dist/api/webdrop-${{ matrix.target }}.zip.json
           if-no-files-found: error
           compression-level: 0
 

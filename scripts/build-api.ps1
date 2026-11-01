@@ -1,7 +1,7 @@
 #Requires -Version 7.2
 [CmdletBinding()]
 param(
-    [ValidateSet('auto', 'linux-x86_64', 'linux-arm64', 'macos-x86_64', 'macos-arm64', 'windows-x86_64')]
+    [ValidateSet('auto', 'linux-x86_64', 'linux-arm64', 'macos-x86_64', 'macos-arm64', 'windows-x86_64', 'windows-arm64')]
     [string]$Target = 'auto',
     [ValidateRange(1, 256)]
     [int]$Jobs = 4,
@@ -109,6 +109,11 @@ function Assert-StaticElf([string]$Path, [string]$TargetName) {
     } finally { $reader.Dispose(); $stream.Dispose() }
 }
 
+$scratchPath = Join-Path $apiDirectory ".build/$scratchName"
+& swift package --package-path $apiDirectory --scratch-path $scratchPath resolve --force-resolved-versions
+if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed.' }
+& (Join-Path $PSScriptRoot 'patch-swift-dependencies.ps1') -ScratchPath $scratchPath
+
 Write-Host "Building $Target"
 & swift build @options
 if ($LASTEXITCODE -ne 0) { throw "Swift build failed ($LASTEXITCODE)." }
@@ -137,7 +142,7 @@ if (-not $SkipStrip -and -not $isWindowsTarget) {
 }
 if ($isLinuxTarget) { Assert-StaticElf $artifact $Target }
 if ($isWindowsTarget) {
-    $bundle = Join-Path $OutputDirectory 'windows-x86_64'
+    $bundle = Join-Path $OutputDirectory $Target
     $null = New-Item -ItemType Directory -Force -Path $bundle
     Copy-Item $binary (Join-Path $bundle 'webdrop.exe') -Force
     $targetInfo = (& swift -print-target-info | Out-String | ConvertFrom-Json)
@@ -151,7 +156,7 @@ if ($isWindowsTarget) {
         }
     }
     Copy-Item (Join-Path $projectRoot 'LICENSE') $bundle -Force
-    $artifact = Join-Path $OutputDirectory 'webdrop-windows-x86_64.zip'
+    $artifact = Join-Path $OutputDirectory "webdrop-$Target.zip"
     Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath $artifact -Force
 }
 $metadata = [ordered]@{
