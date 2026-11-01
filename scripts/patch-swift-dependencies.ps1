@@ -123,3 +123,43 @@ if ($IsWindows) {
         if ($LASTEXITCODE -ne 0) { throw 'Could not apply NIOSSL Windows patch.' }
     }
 }
+
+if ($IsWindows) {
+    $pool = Join-Path $ScratchPath 'checkouts/async-http-client/Sources/AsyncHTTPClient/ConnectionPool.swift'
+    Apply-CheckedPatch $pool "import Glibc`n#else`n#error" "import Glibc`n#elseif os(Windows)`nimport WinSDK`n#else`n#error"
+    $vapor = Join-Path $ScratchPath 'checkouts/vapor/Sources/Vapor'
+    foreach ($name in @('String+IsIPAddress', 'DotEnv', 'DirectoryConfiguration')) {
+        $path = Join-Path $vapor "Utilities/$name.swift"
+        $before = if ($name -eq 'DirectoryConfiguration') { "#else`nimport Darwin.C" } else { "#else`nimport Darwin" }
+        $after = "#elseif os(Windows)`nimport WinSDK`nimport ucrt`n$before"
+        # This insertion retains the original else clause; check its marker first.
+        if (-not [IO.File]::ReadAllText($path).Contains('import WinSDK')) { Apply-CheckedPatch $path $before $after }
+    }
+    $directory = Join-Path $vapor 'Utilities/DirectoryConfiguration.swift'
+    $before = '        let cwd = getcwd(nil, Int(PATH_MAX))'
+    $after = @'
+        #if os(Windows)
+        return DirectoryConfiguration(workingDirectory: FileManager.default.currentDirectoryPath)
+        #else
+        let cwd = getcwd(nil, Int(PATH_MAX))
+'@
+    if (-not [IO.File]::ReadAllText($directory).Contains('#if os(Windows)')) {
+        Apply-CheckedPatch $directory $before $after
+        Apply-CheckedPatch $directory '        return DirectoryConfiguration(workingDirectory: workingDirectory)' "        return DirectoryConfiguration(workingDirectory: workingDirectory)`n        #endif"
+    }
+    $server = Join-Path $vapor 'HTTP/Server/HTTPServer.swift'
+    Apply-CheckedPatch $server 'ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR)' 'ChannelOptions.socketOption(.so_reuseaddr)'
+    Apply-CheckedPatch $server 'ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY)' 'ChannelOptions.socketOption(.tcp_nodelay)'
+    $environment = Join-Path $vapor 'Utilities/WebDropWindowsEnvironment.swift'
+    Copy-Item (Join-Path $PSScriptRoot 'patches/windows-environment.swift') $environment -Force
+    $date = Join-Path $vapor 'Utilities/RFC1123.swift'
+    $dateText = [IO.File]::ReadAllText($date)
+    if (-not $dateText.Contains('// WebDrop Windows RFC1123 cache')) {
+        $marker = 'internal final class RFC1123DateCache: Sendable {'
+        $position = $dateText.IndexOf($marker, [StringComparison]::Ordinal)
+        if ($position -lt 0) { throw 'The Vapor date-cache layout changed.' }
+        $windows = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'patches/windows-http-date.swift'))
+        (Get-Item $date).IsReadOnly = $false
+        [IO.File]::WriteAllText($date, $dateText.Substring(0, $position) + "// WebDrop Windows RFC1123 cache`n#if os(Windows)`n$windows`n#else`n" + $dateText.Substring($position) + "`n#endif`n")
+    }
+}
