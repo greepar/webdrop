@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const browser = await Browser.launch()
 const wait = async (p, fn) => { for (let i = 0; i < 100; i++) { if (await p.eval(fn)) return; await sleep(100) } throw Error(await p.eval(() => document.body.innerText)) }
 try {
@@ -7,7 +7,7 @@ try {
  const url = process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5191'
  await browser.send('Browser.grantPermissions', { origin: url, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] })
  await p.goto(url)
- await p.eval(() => document.querySelector('[aria-label="随机创建房间"]').click()); await wait(p, () => !!document.querySelector('textarea'))
+ await enterRoom(p); await wait(p, () => !!document.querySelector('textarea'))
  const text = '  真实剪贴板\n保留换行  '
  await p.eval(async text => { await navigator.clipboard.writeText(text) }, text)
  await p.eval(() => [...document.querySelectorAll('button')].find(e => e.textContent.trim() === '粘贴文字').click())

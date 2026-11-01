@@ -84,3 +84,5 @@ swift build -c release -j 4
 核心业务集中在一个 actor 中保证首版状态操作原子性；`Features/*` 文档保留业务模块边界，后续拆分不改变契约。[后端目标](GOAL.md) 独立跟踪完成情况。
 
 房间支持可选加入密码，owner 可设置/更换/取消；前端字段、状态与重试规则见 [房间密码接入契约](../../packages/contracts/room-password.md)。
+
+房间可开启加入审批，与密码同时生效；详见 [审批接入契约](../../packages/contracts/room-approval.md)。

@@ -13,8 +13,10 @@ struct Room: Codable, Sendable {
     var id: String; var code: String; var owner: String; var created: Double; var locked = false
     var closed: Double?; var members: [String: Member]; var banned: Set<String> = []
     var passwordHash: String? = nil
+    var approvalRequired: Bool? = nil
+    var joinRequests: [String: JoinRequest]? = nil
     var idleSince: Double?; var sequence = 0; var events: [Event] = []
-    func json(idle: Double) -> JSON { .object(["id": str(id), "code": str(code), "ownerMemberId": str(owner), "createdAt": iso(created), "joinPolicy": str(locked ? "locked" : "open"), "hasPassword": .bool(passwordHash != nil), "expiresAt": idleSince.map { iso($0 + idle) } ?? .null]) }
+    func json(idle: Double) -> JSON { .object(["id": str(id), "code": str(code), "ownerMemberId": str(owner), "createdAt": iso(created), "joinPolicy": str(locked ? "locked" : "open"), "hasPassword": .bool(passwordHash != nil), "approvalRequired": .bool(approvalRequired ?? false), "expiresAt": idleSince.map { iso($0 + idle) } ?? .null]) }
 }
 struct Item: Codable, Sendable {
     var id: String; var room: String; var sender: String; var created: Double; var sequence: Int
@@ -50,4 +52,9 @@ struct State: Codable, Sendable {
 }
 struct Context: Sendable {
     var sessionHash: String?; var source: String; var csrf: String?; var key: String?
+}
+
+struct JoinRequest: Codable, Sendable {
+    var id: String; var device: String; var name: String; var created: Double; var expires: Double; var status: String
+    var json: JSON { .object(["id": str(id), "displayName": str(name), "createdAt": iso(created), "expiresAt": iso(expires), "status": str(status)]) }
 }

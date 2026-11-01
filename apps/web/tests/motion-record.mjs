@@ -2,7 +2,7 @@
 // Uses requestAnimationFrame timestamps (frame gaps) and PerformanceObserver('longtask'), which is the
 // closest headless equivalent to the DevTools Performance panel. Results describe this host only.
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 
 const base = process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'
 const browser = await Browser.launch()
@@ -54,8 +54,8 @@ const summary = (page) => page.eval(() => {
 try {
   const page = await browser.newPage({ width: 390, height: 844, mobile: true })
   await page.goto(base)
-  await wait(page, () => !document.querySelector('[aria-label="随机创建房间"]').disabled, 'entry')
-  await page.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await wait(page, () => document.querySelectorAll('[role=group][aria-label^="房间号"] input').length > 0, 'entry')
+  await enterRoom(page)
   await wait(page, () => !!document.querySelector('textarea'), 'room')
 
   await startRecorder(page)
@@ -106,9 +106,9 @@ try {
   const entry = await browser.newPage({ width: 390, height: 844, mobile: true })
   await entry.goto(base)
   await wait(entry, () => !entry.eval ? false : true, 'noop').catch(() => {})
-  await wait(entry, () => !document.querySelector('[aria-label="随机创建房间"]').disabled, 'entry 2')
+  await wait(entry, () => document.querySelectorAll('[role=group][aria-label^="房间号"] input').length > 0, 'entry 2')
   await startRecorder(entry)
-  await entry.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await enterRoom(entry)
   await wait(entry, () => !!document.querySelector('textarea'), 'pow room')
   await sleep(300)
   const c = await summary(entry)
@@ -126,9 +126,9 @@ try {
   // D: desktop dialog, checking that locking body scroll does not shift the page sideways.
   const desk = await browser.newPage({ width: 1440, height: 900, mobile: false })
   await desk.goto(base)
-  await wait(desk, () => !document.querySelector('[aria-label="随机创建房间"]').disabled, 'desktop entry')
+  await wait(desk, () => document.querySelectorAll('[role=group][aria-label^="房间号"] input').length > 0, 'desktop entry')
   const before = await desk.eval(() => document.documentElement.clientWidth)
-  await desk.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await enterRoom(desk)
   await wait(desk, () => !!document.querySelector('textarea'), 'desktop room')
   await desk.eval(() => [...document.querySelectorAll('button')].find(b => b.textContent.includes('成员'))?.click())
   await sleep(400)

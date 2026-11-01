@@ -9,6 +9,7 @@ export function EntryPage() {
   const entry = useEntry()
   const powText = describePow(entry.powStatus)
   const inlineError = entry.notice?.tone === 'error' ? entry.notice.text : null
+  const inlineHint = entry.notice?.tone === 'info' ? entry.notice.text : null
   const cooling = entry.powStatus.phase === 'cooldown'
 
   return (
@@ -37,10 +38,11 @@ export function EntryPage() {
             length={entry.length}
             disabled={entry.busyNow || cooling}
             error={inlineError}
+            hint={inlineHint}
+            canCreate={entry.canCreate}
             onChange={entry.setCode}
-            onRandom={entry.randomRoom}
             onCreate={entry.createRoom}
-            onJoin={entry.joinRoom}
+            onRandom={entry.randomRoom}
           />
           <div className="mt-6 min-h-10">
             {entry.busyNow && (

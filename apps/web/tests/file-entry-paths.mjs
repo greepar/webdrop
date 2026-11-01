@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const browser = await Browser.launch()
 const wait = async (p, fn) => { for (let i = 0; i < 100; i++) { if (await p.eval(fn)) return; await sleep(100) } throw Error(await p.eval(() => document.body.innerText)) }
 try {
  const p = await browser.newPage({ width: 390, height: 844, mobile: true })
  await p.goto(process.env.WEBDROP_TEST_URL)
- await p.eval(() => document.querySelector('[aria-label="随机创建房间"]').click()); await wait(p, () => !!document.querySelector('textarea'))
+ await enterRoom(p); await wait(p, () => !!document.querySelector('textarea'))
  await p.eval(() => {
    const files = new DataTransfer(); files.items.add(new File(['drop bytes'], 'drop.txt', { type: 'text/plain' })); files.items.add(new File([], 'empty.txt', { type: 'text/plain' }))
    window.__dropFiles = files

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import {Browser,sleep} from './browser.mjs';
+import {Browser,sleep, enterRoom } from './browser.mjs';
 const browser=await Browser.launch();
 const wait=async(p,fn)=>{for(let i=0;i<100;i++){if(await p.eval(fn))return;await sleep(200)}throw Error('Condition timed out: '+await p.eval(()=>document.body.innerText))};
 try{
-const p=await browser.newPage();await p.send('Network.enable');browser.on(p.sessionId,'Network.responseReceived',e=>{if(e.response.status>=400)console.log('HTTP',e.response.status,new URL(e.response.url).pathname)});await p.goto((process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'));await p.eval(()=>document.querySelector('[aria-label="随机创建房间"]').click());await wait(p,()=>!!document.querySelector('textarea'));
+const p=await browser.newPage();await p.send('Network.enable');browser.on(p.sessionId,'Network.responseReceived',e=>{if(e.response.status>=400)console.log('HTTP',e.response.status,new URL(e.response.url).pathname)});await p.goto((process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'));await enterRoom(p);await wait(p,()=>!!document.querySelector('textarea'));
 let dropped=false;
 await p.send('Fetch.enable',{patterns:[{urlPattern:'*/uploads/*/complete',requestStage:'Response'}]});
 const offComplete=browser.on(p.sessionId,'Fetch.requestPaused',async e=>{if(!dropped){dropped=true;await p.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'ConnectionReset'})}else await p.send('Fetch.continueRequest',{requestId:e.requestId})});

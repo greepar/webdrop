@@ -1,6 +1,6 @@
 # WebDrop API v1 实现协议
 
-对应 `openapi.yaml` 0.4.0。前端仅依赖这些接口行为；后端当前为单进程、本地文件持久化实现。
+对应 `openapi.yaml` 0.5.0。前端仅依赖这些接口行为；后端当前为单进程、本地文件持久化实现。
 
 ## 建立会话与写操作
 
@@ -118,3 +118,7 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 ## 可选房间密码
 
 创建/加入请求增加可选 password，owner 通过 PATCH 设置、替换或用 null 取消。Room 增加 hasPassword。已有成员不受改密影响，锁定优先于密码，错误密码在 PoW 后返回403 ROOM_PASSWORD_INVALID。字节限制、重试、事件及兼容规则见 [room-password.md](room-password.md)。
+
+## 房主审批
+
+可选 approvalRequired 设置与密码独立。开启后，新成员通过密码与PoW校验后返回202申请状态，房主批准后才获得成员权限。接口、轮询与生命周期见 [room-approval.md](room-approval.md)。

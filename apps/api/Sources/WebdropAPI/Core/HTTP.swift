@@ -104,6 +104,10 @@ struct BusinessRoutes: RouteCollection {
         }
         // Explicit JSON routes keep unknown endpoints and methods outside the dispatcher.
         let definitions: [(HTTPMethod, [PathComponent])] = [
+            (.GET, ["rooms", ":roomId", "join-requests"]),
+            (.GET, ["rooms", ":roomId", "join-requests", ":requestId"]),
+            (.POST, ["rooms", ":roomId", "join-requests", ":requestId", "approve"]),
+            (.POST, ["rooms", ":roomId", "join-requests", ":requestId", "reject"]),
             (.GET, ["capabilities"]), (.GET, ["session"]), (.POST, ["pow", "challenges"]),
             (.POST, ["rooms"]), (.POST, ["rooms", "join"]), (.GET, ["rooms", ":roomId"]),
             (.PATCH, ["rooms", ":roomId"]), (.DELETE, ["rooms", ":roomId"]),

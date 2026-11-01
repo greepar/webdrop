@@ -2,7 +2,7 @@
 
 此目录是 Swift 与 TypeScript 之间的 HTTP 接口约定，不是运行时代码包。
 
-- `openapi.yaml` 0.4.0 描述已实现的后端接口（JSON 格式的合法 YAML 1.2 文档），包括请求与响应 schema。
+- `openapi.yaml` 0.5.0 描述已实现的后端接口（JSON 格式的合法 YAML 1.2 文档），包括请求与响应 schema。
 - 未来业务接口先在这里评审字段、状态码与权限，再分别实现 Swift DTO 和前端类型。
 - 当接口数量增多时，再引入 OpenAPI 类型生成；当前无需代码生成工具链。
 - UUID / 资源 ID 对前端均为不透明字符串。时间统一为 UTC ISO 8601，文件大小用字节，过期时间使用 `expiresAt`。
@@ -30,3 +30,5 @@
 离线检查：`python3 scripts/test-contract.py`；真实 HTTP 检查：`python3 scripts/api-smoke.py --validate-contract`。两者依赖 `scripts/requirements-contract.txt`，校验请求、显式状态码、JSON 响应格式与 SSE payload。
 
 [房间密码接入契约](room-password.md)（0.4.0）：可选 password、owner 设置/修改/取消、hasPassword 和错误/重试语义。
+
+[房主审批接入契约](room-approval.md)（0.5.0）：approvalRequired 设置、202待审批响应、房主决定与访客轮询。当前正式 OpenAPI 版本为0.5.0。

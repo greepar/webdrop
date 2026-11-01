@@ -21,6 +21,8 @@ export function useEntry() {
   const [code, setCodeState] = useState('')
   const [busy, setBusy] = useState<Kind | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
+  // Offer "create room" only after the typed code could not be joined.
+  const [canCreate, setCanCreate] = useState(false)
   const pendingRef = useRef(false)
   const operationRef = useRef<AbortController | null>(null)
   useEffect(() => () => operationRef.current?.abort(), [])
@@ -29,10 +31,11 @@ export function useEntry() {
 
   const setCode = useCallback((value: string) => {
     setNotice(null)
+    setCanCreate(false)
     setCodeState(value)
   }, [])
 
-  const submit = useCallback(async (kind: Kind) => {
+  const submit = useCallback(async (kind: Kind, options: { auto?: boolean } = {}) => {
     if (pendingRef.current || pow.status.phase === 'cooldown') return
     if (session.state.phase !== 'ready') {
       setNotice({ tone: 'error', text: session.state.phase === 'loading' ? '正在准备连接，请稍候' : '无法建立连接，请使用下方重试按钮' })
@@ -60,6 +63,7 @@ export function useEntry() {
         ? await joinRoom(proof, code, idempotencyKey, operation.signal)
         : await createRoom(proof, kind === 'create' ? code : null, idempotencyKey, operation.signal)
       if (operation.signal.aborted) return
+      setCanCreate(false)
       navigate(`/rooms/${membership.room.id}`)
     } catch (error) {
       if (operation.signal.aborted || isAbortError(error)) return
@@ -68,7 +72,13 @@ export function useEntry() {
       } else if (isApiError(error) && error.code === 'CODE_TAKEN') {
         setNotice({ tone: 'error', text: '这个房间号已被占用，请换一个' })
       } else if (isApiError(error) && error.code === 'ROOM_UNAVAILABLE') {
-        setNotice({ tone: 'error', text: '房间不存在或暂不可加入' })
+        // Auto-join on a code that has no open room is not an error: creating it is the obvious next step.
+        if (options.auto) {
+          setCanCreate(true)
+          setNotice({ tone: 'info', text: '这个号码暂时进不去' })
+        } else {
+          setNotice({ tone: 'error', text: '房间不存在或暂不可加入' })
+        }
       } else if (isApiError(error) && error.code === 'ROOM_FULL') {
         setNotice({ tone: 'error', text: '房间已满' })
       } else if (isApiError(error) && error.code === 'RATE_LIMITED') {
@@ -83,6 +93,19 @@ export function useEntry() {
       }
     }
   }, [code, length, navigate, pow, session.state.phase, capabilities])
+
+  // Completing all boxes joins immediately. The ref stops a failed attempt from retrying on every
+  // render; editing a digit changes the code and arms the next attempt.
+  const attemptedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (code.length !== length) {
+      attemptedRef.current = null
+      return
+    }
+    if (busy || pendingRef.current || attemptedRef.current === code) return
+    attemptedRef.current = code
+    void submit('join', { auto: true })
+  }, [busy, code, length, submit])
 
   const busyNow = busy !== null || pow.status.phase === 'fetching' || pow.status.phase === 'solving'
 
@@ -105,6 +128,7 @@ export function useEntry() {
       setBusy(null)
       pow.cancel()
     },
+    canCreate,
     createRoom: () => submit('create'),
     randomRoom: () => submit('random'),
     joinRoom: () => submit('join'),

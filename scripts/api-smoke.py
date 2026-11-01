@@ -68,7 +68,7 @@ class Client:
         path = '/api/v1/rooms/join' if join else '/api/v1/rooms'
         result = self.request('POST', path, body, expected, {'Idempotency-Key': key})[2]
         if expected >= 400: return result
-        assert self.request('POST', path, body, 201, {'Idempotency-Key': key})[2] == result
+        assert self.request('POST', path, body, expected, {'Idempotency-Key': key})[2] == result
         return result['data']
     def post(self, path, body, expected=201):
         return self.request('POST', path, body, expected, {'Idempotency-Key': str(uuid.uuid4())})[2]['data']
@@ -82,7 +82,15 @@ room = owner.room(password='private room 🔑')['room']
 assert room['hasPassword'] is True
 rid = room['id']
 assert guest.room(room['code'], join=True, expected=403)['error']['code'] == 'ROOM_PASSWORD_INVALID'
-member = guest.room(room['code'], join=True, password='private room 🔑')['membership']
+owner.request('PATCH', f'/api/v1/rooms/{rid}', {'approvalRequired':True})
+pending = guest.room(room['code'], join=True, password='private room 🔑', expected=202)
+request_path = f'/api/v1/rooms/{rid}/join-requests/' + pending['request']['id']
+guest.request('GET', f'/api/v1/rooms/{rid}', expected=404)
+assert guest.request('GET', request_path)[2]['data']['status'] == 'pending'
+assert owner.request('GET', f'/api/v1/rooms/{rid}/join-requests')[2]['data'][0]['id'] == pending['request']['id']
+owner.request('POST', request_path + '/approve', {})
+assert guest.request('GET', request_path)[2]['data']['status'] == 'approved'
+member = guest.room(room['code'], join=True, expected=200)['membership']
 try:
     guest.request('PATCH', f'/api/v1/rooms/{rid}', {'password':None}, expected=403)
     assert owner.request('PATCH', f'/api/v1/rooms/{rid}', {'password':'replacement'})[2]['data']['hasPassword'] is True
@@ -135,7 +143,7 @@ try:
     guest.request('GET', f'/api/v1/rooms/{rid}/events', expected=404)
     owner.request('DELETE', f'/api/v1/rooms/{rid}', expected=204)
     owner.request('GET', public_path, expected=410)
-    print('PASS: room passwords, sessions, CSRF, PoW, idempotency, room permissions, chat, streaming upload, SHA256, Range/HEAD, public links, SSE, kick and close revocation')
+    print('PASS: owner approval, room passwords, sessions, CSRF, PoW, idempotency, room permissions, chat, streaming upload, SHA256, Range/HEAD, public links, SSE, kick and close revocation')
 except BaseException:
     try: owner.request('DELETE', f'/api/v1/rooms/{rid}', expected=204)
     except Exception: pass

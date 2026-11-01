@@ -1,6 +1,6 @@
 // Confirmation steps must replace the current dialog body, never stack a second modal on top.
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 
 const base = process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'
 const browser = await Browser.launch()
@@ -14,8 +14,8 @@ const title = (page) => page.eval(() => document.querySelector('[role=dialog] h2
 try {
   const page = await browser.newPage({ width: 1440, height: 900 })
   await page.goto(base)
-  await wait(page, () => !document.querySelector('[aria-label="随机创建房间"]').disabled, 'entry')
-  await page.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await wait(page, () => document.querySelectorAll('[role=group][aria-label^="房间号"] input').length > 0, 'entry')
+  await enterRoom(page)
   await wait(page, () => !!document.querySelector('textarea'), 'room')
 
   // Settings -> close room confirmation.
@@ -77,8 +77,8 @@ try {
   const reduced = await browser.newPage({ width: 1440, height: 900 })
   await reduced.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
   await reduced.goto(base)
-  await wait(reduced, () => !document.querySelector('[aria-label="随机创建房间"]').disabled, 'reduced entry')
-  await reduced.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await wait(reduced, () => document.querySelectorAll('[role=group][aria-label^="房间号"] input').length > 0, 'reduced entry')
+  await enterRoom(reduced)
   await wait(reduced, () => !!document.querySelector('textarea'), 'reduced room')
   await reduced.eval(() => [...document.querySelectorAll('button')].find(b => b.textContent.includes('管理')).click())
   await wait(reduced, () => (document.querySelector('[role=dialog] h2')?.textContent ?? '') === '房间设置', 'reduced settings')

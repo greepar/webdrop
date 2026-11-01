@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const a = await Browser.launch(), b = await Browser.launch(), c = await Browser.launch()
 const wait = async (page, fn) => { for (let i = 0; i < 150; i++) { if (await page.eval(fn)) return; await sleep(100) } throw Error(await page.eval(() => document.body.innerText)) }
 const clickText = (page, text) => page.eval(text => [...document.querySelectorAll('button')].find(el => el.textContent.trim() === text).click(), text)
 try {
  const p = await a.newPage({ width: 390, height: 844, mobile: true }), q = await b.newPage(), outsider = await c.newPage()
  const url = process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5191'
- await p.goto(url); await p.eval(() => document.querySelector('[aria-label="随机创建房间"]').click()); await wait(p, () => !!document.querySelector('textarea'))
+ await p.goto(url); await enterRoom(p); await wait(p, () => !!document.querySelector('textarea'))
  const code = await p.eval(() => document.querySelector('h1').lastElementChild.textContent.trim())
  await q.goto(url)
  await q.eval(code => { const e = document.querySelector('input[inputmode=numeric]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, code); e.dispatchEvent(new Event('input', { bubbles: true })) }, code)

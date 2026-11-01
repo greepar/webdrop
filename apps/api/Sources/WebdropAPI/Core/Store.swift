@@ -194,6 +194,10 @@ actor Store {
                 if let prior = state.idem[identity!] {
                     guard try prior.fingerprint == fingerprint && passwordMatches(password, prior.passwordHash) else { throw APIError(409, "IDEMPOTENCY_CONFLICT", "Key was used with different input") }
                     if let room = prior.room { _ = try member(room, s.id) }
+                    if prior.response.status == 202 {
+                        let roomID = prior.response.json["data"]["roomId"].string ?? ""
+                        guard state.rooms[roomID]?.closed == nil, state.rooms[roomID] != nil, state.rooms[roomID]?.banned.contains(s.id) == false else { throw APIError(404, "NOT_FOUND", "Room not found") }
+                    }
                     return prior.response
                 }
             }
@@ -268,6 +272,7 @@ private func migrateRoomPasswordFlag(_ value: JSON) -> JSON {
     switch value {
     case .object(var fields):
         if fields["ownerMemberId"] != nil && fields["joinPolicy"] != nil && fields["hasPassword"] == nil { fields["hasPassword"] = .bool(false) }
+        if fields["ownerMemberId"] != nil && fields["joinPolicy"] != nil && fields["approvalRequired"] == nil { fields["approvalRequired"] = .bool(false) }
         return .object(fields.mapValues(migrateRoomPasswordFlag))
     case .array(let values): return .array(values.map(migrateRoomPasswordFlag))
     default: return value

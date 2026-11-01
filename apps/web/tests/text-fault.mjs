@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const browser = await Browser.launch()
 const wait = async (p, fn) => { for (let i = 0; i < 100; i++) { if (await p.eval(fn)) return; await sleep(100) } throw Error(await p.eval(() => document.body.innerText)) }
 try {
   const page = await browser.newPage()
   await page.goto(process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5190')
-  await page.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await enterRoom(page)
   await wait(page, () => !!document.querySelector('textarea'))
   let dropped = false
   await page.send('Fetch.enable', { patterns: [{ urlPattern: '*/rooms/*/items', requestStage: 'Response' }] })

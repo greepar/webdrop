@@ -73,3 +73,32 @@ export class Browser {
     await rm(this.profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 }
+
+// Types a random room code into the four boxes and lets the page auto-join; if the room does not
+// exist yet, falls back to the create button. Returns the code used.
+export async function enterRoom(page, code = String(Math.floor(Math.random() * 9000) + 1000)) {
+  await page.eval((value) => {
+    const inputs = [...document.querySelectorAll('[role=group][aria-label^="房间号"] input')]
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    inputs.forEach((input, index) => {
+      setter.call(input, value[index] ?? '')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+  }, code)
+  // Wait for the auto-join attempt to settle: either the room opens, or the create offer appears.
+  for (let i = 0; i < 200; i++) {
+    const state = await page.eval(() => ({
+      room: !!document.querySelector('textarea'),
+      offer: !!document.querySelector('[data-create-room]'),
+    }))
+    if (state.room) return code
+    if (state.offer) break
+    await sleep(100)
+  }
+  await page.eval(() => document.querySelector('[data-create-room]')?.click())
+  for (let i = 0; i < 200; i++) {
+    if (await page.eval(() => !!document.querySelector('textarea'))) return code
+    await sleep(100)
+  }
+  throw Error('enterRoom failed: ' + (await page.eval(() => document.body.innerText.slice(0, 200))))
+}

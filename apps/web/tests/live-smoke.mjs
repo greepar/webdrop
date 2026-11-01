@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
-import {Browser,sleep} from './browser.mjs';
+import {Browser,sleep, enterRoom } from './browser.mjs';
 const a=await Browser.launch(), b=await Browser.launch(), c=await Browser.launch();
 const wait=async(p,fn)=>{for(let i=0;i<100;i++){if(await p.eval(fn))return;await sleep(200)}throw Error('Condition timed out: '+await p.eval(()=>document.body.innerText))};
 const fill=async(p,selector,value)=>{await p.eval(({selector,value})=>{const e=document.querySelector(selector);Object.getOwnPropertyDescriptor(e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(e,value);e.dispatchEvent(new Event('input',{bubbles:true}))},{selector,value});await sleep(80)};
 try{
  const p=await a.newPage({width:390,height:844,mobile:true}),q=await b.newPage();
  await p.goto((process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'));
- await p.eval(()=>document.querySelector('[aria-label="随机创建房间"]').click());
+ await enterRoom(p);
  await wait(p,()=>!!document.querySelector('textarea'));
  const code=await p.eval(()=>document.querySelector('h1').innerText.trim());
  await q.goto((process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'));
- await fill(q,'input[inputmode=numeric]',code);
- await q.eval(()=>document.querySelector('form').requestSubmit());
+ await enterRoom(q, code);
  await wait(q,()=>!!document.querySelector('textarea'));
  await fill(p,'textarea','双会话实时同步检查');
  await p.eval(()=>document.querySelector('[aria-label="发送"]').click());

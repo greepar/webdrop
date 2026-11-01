@@ -519,3 +519,39 @@ extension Fixture {
     let updated = events.events.first { $0.type == "room.updated" }
     #expect(updated?.data["hasPassword"] == .bool(false))
 }
+
+@Test func ownerApprovalGatesMembership() async throws {
+    let f = try Fixture(maxDevices: 2); defer { f.clean() }
+    let owner = try await f.user("approval-owner"), guest = try await f.user("approval-guest"), other = try await f.user("approval-other")
+    let room = try await f.room(owner)["room"]["id"].string!
+    _ = try await f.request("PATCH", "rooms/\(room)", .object(["approvalRequired": .bool(true)]), owner)
+    let (body, key) = try await f.proved(guest, code: "0042", joining: true)
+    let pending = try await f.request("POST", "rooms/join", body, guest, key: key)
+    #expect(pending.status == 202)
+    let id = pending.json["data"]["request"]["id"].string!
+    let path = "rooms/\(room)/join-requests/\(id)"
+    let (againBody, againKey) = try await f.proved(guest, code: "0042", joining: true)
+    let again = try await f.request("POST", "rooms/join", againBody, guest, key: againKey)
+    #expect(again.json["data"]["request"]["id"] == str(id))
+    await expectError("NOT_FOUND") { _ = try await f.request("GET", "rooms/\(room)", guest) }
+    await expectError("NOT_FOUND") { _ = try await f.request("GET", path, other) }
+    await expectError("NOT_FOUND") { _ = try await f.request("POST", path + "/approve", guest) }
+    #expect(try await f.request("GET", path, guest).json["data"]["status"] == str("pending"))
+    _ = try await f.request("POST", path + "/approve", owner)
+    _ = try await f.request("POST", path + "/approve", owner)
+    #expect(try await f.request("GET", path, guest).json["data"]["status"] == str("approved"))
+    _ = try await f.request("GET", "rooms/\(room)", guest)
+    await expectError("JOIN_REQUEST_STATE") { _ = try await f.request("POST", path + "/reject", owner) }
+    let (otherBody, otherKey) = try await f.proved(other, code: "0042", joining: true)
+    let otherPending = try await f.request("POST", "rooms/join", otherBody, other, key: otherKey)
+    let otherPath = "rooms/\(room)/join-requests/\(otherPending.json["data"]["request"]["id"].string!)"
+    await expectError("ROOM_FULL") { _ = try await f.request("POST", otherPath + "/approve", owner) }
+    _ = try await f.request("POST", otherPath + "/reject", owner)
+    #expect(try await f.request("GET", otherPath, other).json["data"]["status"] == str("rejected"))
+    let (retryBody, retryKey) = try await f.proved(other, code: "0042", joining: true)
+    let retry = try await f.request("POST", "rooms/join", retryBody, other, key: retryKey)
+    let retryPath = "rooms/\(room)/join-requests/\(retry.json["data"]["request"]["id"].string!)"
+    f.clock.advance(601)
+    #expect(try await f.request("GET", retryPath, other).json["data"]["status"] == str("expired"))
+    await expectError("JOIN_REQUEST_STATE") { _ = try await f.request("POST", retryPath + "/approve", owner) }
+}

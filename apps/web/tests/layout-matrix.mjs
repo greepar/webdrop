@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { mkdir } from 'node:fs/promises'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const browser = await Browser.launch()
 const output = process.env.WEBDROP_SCREENSHOTS || '/tmp/webdrop-layout'
 await mkdir(output, { recursive: true })
 try {
   const page = await browser.newPage({ width: 390, height: 844, mobile: true })
   await page.goto(process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5173')
-  await page.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await enterRoom(page)
   for (let i = 0; i < 100; i++) { if (await page.eval(() => !!document.querySelector('textarea'))) break; await sleep(100) }
   assert.equal(await page.eval(() => !!document.querySelector('textarea')), true)
   await page.eval(() => {

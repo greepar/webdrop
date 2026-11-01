@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const browser = await Browser.launch()
 try {
   const page = await browser.newPage({ width: 390, height: 844, mobile: true })
@@ -11,7 +11,7 @@ try {
   })
   const completed = new Promise(resolve => browser.on(page.sessionId, 'Tracing.tracingComplete', resolve))
   await page.send('Tracing.start', { categories: 'devtools.timeline,blink.user_timing', transferMode: 'ReturnAsStream' })
-  await page.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await enterRoom(page)
   let ready = false
   for (let i = 0; i < 200; i++) {
     if (await page.eval(() => !!document.querySelector('textarea'))) { ready = true; break }

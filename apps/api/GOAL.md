@@ -64,3 +64,5 @@
 - [ ] 生产流量下的压力测试、可信边缘限流配置和多实例存储扩展。
 
 - [x] 可选房间密码：创建设置、owner 修改/取消、新成员 PoW 后验证；hasPassword 契约、bcrypt 持久化、幂等与旧快照兼容。见 [房间密码接入](../../packages/contracts/room-password.md)。
+
+- [x] 房主审批入房：可选 approvalRequired、待审批权限隔离、批准/拒绝、申请去重和10分钟过期；前端通过独立轮询接口接入。

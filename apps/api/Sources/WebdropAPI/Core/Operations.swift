@@ -18,7 +18,7 @@ extension Store {
     }
     func dispatch(_ method: String, _ path: [String], _ body: JSON, _ s: Session, _ c: Context, _ query: [String: String]) throws -> WireResponse {
         if method == "POST", path == ["rooms"] || path == ["rooms", "join"] {
-            try body.only(["code", "proof", "password"])
+            try body.only(path.count == 2 ? ["code", "proof", "password"] : ["code", "proof", "password", "approvalRequired"])
             let password = try roomPassword(body)
             let joining = path.count == 2
             if joining || body["code"] != .null { try validateCode(body["code"].string) }
@@ -33,6 +33,17 @@ extension Store {
                 if let passwordHash = room.passwordHash {
                     guard try passwordMatches(password, passwordHash) else { throw APIError(403, "ROOM_PASSWORD_INVALID", "Room password is missing or incorrect") }
                 }
+                if room.approvalRequired == true {
+                    var requests = room.joinRequests ?? [:]
+                    requests = requests.filter { $0.value.expires > now }
+                    if let existing = requests.values.first(where: { $0.device == s.id && $0.status == "pending" }) {
+                        return dataResponse(.object(["roomId": str(room.id), "request": existing.json]), status: 202)
+                    }
+                    guard requests.count < 100 else { throw APIError(429, "JOIN_REQUEST_LIMIT", "Too many join requests", retryAfter: 60) }
+                    let request = JoinRequest(id: uid(), device: s.id, name: s.name, created: now, expires: now + 600, status: "pending")
+                    requests[request.id] = request; room.joinRequests = requests; state.rooms[room.id] = room
+                    return dataResponse(.object(["roomId": str(room.id), "request": request.json]), status: 202)
+                }
                 guard room.members.count < settings.maxDevices else { throw APIError(409, "ROOM_FULL", "Room is full") }
                 let m = Member(id: uid(), device: s.id, name: s.name, role: "member", joined: now, seen: now)
                 room.members[s.id] = m; room.idleSince = nil; state.rooms[room.id] = room
@@ -46,10 +57,49 @@ extension Store {
             guard !state.rooms.values.contains(where: { $0.closed == nil && $0.code == code }) else { throw APIError(409, "CODE_TAKEN", "Room code is in use") }
             let m = Member(id: uid(), device: s.id, name: s.name, role: "owner", joined: now, seen: now)
             var room = Room(id: uid(), code: code, owner: m.id, created: now, members: [s.id: m])
+            if let value = body.object?["approvalRequired"] {
+                guard case .bool(let required) = value else { throw APIError(400, "INVALID_INPUT", "approvalRequired must be boolean") }
+                room.approvalRequired = required
+            }
             room.passwordHash = try password.map { try Bcrypt.hash($0, cost: 10) }
             state.rooms[room.id] = room
             emit(room.id, "member.joined", m.json(now: now, lease: settings.leaseSeconds))
             return dataResponse(.object(["room": room.json(idle: settings.idleSeconds), "membership": m.json(now: now, lease: settings.leaseSeconds)]), status: 201)
+        }
+        if path.count >= 3, path[0] == "rooms", path[2] == "join-requests" {
+            guard var room = state.rooms[path[1]], room.closed == nil else { throw APIError(404, "NOT_FOUND", "Room not found") }
+            let owner = room.members[s.id]?.role == "owner"
+            if method == "GET", path.count == 3 {
+                _ = try member(room.id, s.id, owner: true)
+                let requests = (room.joinRequests ?? [:]).values.filter { $0.expires > now && $0.status == "pending" }.sorted { $0.created < $1.created }
+                return dataResponse(.array(requests.map(\.json)))
+            }
+            guard path.count >= 4, var request = room.joinRequests?[path[3]], owner || request.device == s.id else { throw APIError(404, "NOT_FOUND", "Request not found") }
+            if method == "GET", path.count == 4 {
+                if request.status == "pending" && request.expires <= now { request.status = "expired" }
+                return dataResponse(request.json)
+            }
+            guard method == "POST", path.count == 5, ["approve", "reject"].contains(path[4]) else { throw APIError(404, "NOT_FOUND", "Route not found") }
+            _ = try member(room.id, s.id, owner: true); try body.only([])
+            room = state.rooms[room.id]!
+            let desired = path[4] == "approve" ? "approved" : "rejected"
+            if request.status == desired { return dataResponse(request.json) }
+            guard request.status == "pending", request.expires > now else { throw APIError(409, "JOIN_REQUEST_STATE", "Request is no longer pending") }
+            if desired == "approved" {
+                guard !room.locked, !room.banned.contains(request.device) else { throw APIError(409, "JOIN_REQUEST_STATE", "Room is locked or requester revoked") }
+                guard state.sessions.values.contains(where: { $0.id == request.device && $0.expires > now }) else { throw APIError(409, "JOIN_REQUEST_STATE", "Requester session expired") }
+                if room.members[request.device] == nil {
+                    guard room.members.count < settings.maxDevices else { throw APIError(409, "ROOM_FULL", "Room is full") }
+                    let m = Member(id: uid(), device: request.device, name: request.name, role: "member", joined: now, seen: now)
+                    room.members[request.device] = m
+                    room.idleSince = nil
+                    state.rooms[room.id] = room
+                    emit(room.id, "member.joined", m.json(now: now, lease: settings.leaseSeconds))
+                }
+            }
+            request.status = desired
+            state.rooms[room.id]?.joinRequests?[request.id] = request
+            return dataResponse(request.json)
         }
         if path.first == "rooms", path.count >= 2 {
             let id = path[1]; let m = try member(id, s.id)
@@ -60,12 +110,16 @@ extension Store {
                     return dataResponse(.object(info))
                 }
                 if method == "PATCH" {
-                    _ = try member(id, s.id, owner: true); try body.only(["joinPolicy", "password"])
+                    _ = try member(id, s.id, owner: true); try body.only(["joinPolicy", "password", "approvalRequired"])
                     guard let fields = body.object, !fields.isEmpty else { throw APIError(400, "INVALID_INPUT", "Provide joinPolicy or password") }
                     if fields["joinPolicy"] != nil {
                         let policy = try body.required("joinPolicy")
                         guard ["open", "locked"].contains(policy) else { throw APIError(400, "INVALID_INPUT", "Invalid join policy") }
                         state.rooms[id]?.locked = policy == "locked"
+                    }
+                    if let value = fields["approvalRequired"] {
+                        guard case .bool(let required) = value else { throw APIError(400, "INVALID_INPUT", "approvalRequired must be boolean") }
+                        state.rooms[id]?.approvalRequired = required
                     }
                     if fields["password"] != nil {
                         let password = try roomPassword(body)

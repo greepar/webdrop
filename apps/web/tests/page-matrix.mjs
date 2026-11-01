@@ -1,7 +1,7 @@
 // Visual matrix for pages the room-only layout check does not cover: entry, share and 404.
 // Runs against a live API + frontend so the share page reads real metadata.
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 
 const base = process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'
 const viewports = [
@@ -43,8 +43,8 @@ try {
   // Create one room and one share link, so the share page has real data for every viewport.
   const setup = await open(browser, 'light', viewports[0])
   await setup.goto(base)
-  await wait(setup, () => !document.querySelector('[aria-label="随机创建房间"]').disabled, 'entry ready')
-  await setup.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await wait(setup, () => document.querySelectorAll('[role=group][aria-label^="房间号"] input').length > 0, 'entry ready')
+  await enterRoom(setup)
   await wait(setup, () => !!document.querySelector('textarea'), 'room')
   await setup.eval(async () => {
     const session = (await (await fetch('/api/v1/session')).json()).data
@@ -78,14 +78,20 @@ try {
         await wait(page, () => !!document.querySelector('h1'), `entry ${label}`)
         await checkOverflow(page, `entry ${label}`)
         assert.equal(await page.eval(() => document.querySelector('h1').textContent), 'WebDrop', `entry brand ${label}`)
-        const inputBox = await page.eval(() => {
-          const el = document.querySelector('#root input[type=text]')
-          const r = el.getBoundingClientRect()
-          return { h: r.height, fontSize: getComputedStyle(el).fontSize, right: r.right, viewport: innerWidth }
+        const boxes = await page.eval(() => {
+          const els = [...document.querySelectorAll('[role=group][aria-label^="房间号"] input')]
+          return {
+            count: els.length,
+            height: els[0] ? els[0].getBoundingClientRect().height : 0,
+            fontSize: els[0] ? getComputedStyle(els[0]).fontSize : '0',
+            right: els.length ? Math.max(...els.map(el => el.getBoundingClientRect().right)) : 0,
+            viewport: innerWidth,
+          }
         })
-        assert.ok(inputBox.right <= inputBox.viewport + 0.5, `entry input clipped ${label}`)
-        assert.ok(parseFloat(inputBox.fontSize) >= 16, `entry input font ${label}=${inputBox.fontSize}`)
-        assert.ok(inputBox.h >= 44, `entry input height ${label}=${inputBox.h}`)
+        assert.equal(boxes.count, 4, `entry should show 4 boxes at ${label}`)
+        assert.ok(boxes.right <= boxes.viewport + 0.5, `entry boxes clipped ${label}`)
+        assert.ok(parseFloat(boxes.fontSize) >= 16, `entry box font ${label}=${boxes.fontSize}`)
+        assert.ok(boxes.height >= 44, `entry box height ${label}=${boxes.height}`)
         await page.screenshot({ path: `${out}/entry-${theme}-${vp.name}.png` })
 
         await page.goto(base + sharePath)

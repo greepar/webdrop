@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 const a = await Browser.launch(), b = await Browser.launch()
 const wait = async (p, fn) => { for (let i = 0; i < 150; i++) { if (await p.eval(fn)) return; await sleep(100) } throw Error(await p.eval(() => document.body.innerText)) }
 try {
  const p = await a.newPage(), publicPage = await b.newPage()
  await p.goto(process.env.WEBDROP_TEST_URL)
- await p.eval(() => document.querySelector('[aria-label="随机创建房间"]').click()); await wait(p, () => !!document.querySelector('textarea'))
+ await enterRoom(p); await wait(p, () => !!document.querySelector('textarea'))
  await p.eval(() => { const files = new DataTransfer(); files.items.add(new File(['expires naturally'], 'expiry.txt', { type: 'text/plain' })); const e = document.querySelector('input[type=file]'); e.files = files.files; e.dispatchEvent(new Event('change', { bubbles: true })) })
  await wait(p, () => !!document.querySelector('[aria-label="分享 expiry.txt"]'))
  const link = await p.eval(async () => {

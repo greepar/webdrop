@@ -1,7 +1,7 @@
 // Checks that only a newly arrived tail message fades in, and that history pagination does not animate.
 // Runs against a live API + frontend (isolated runner) because it needs real SSE delivery.
 import assert from 'node:assert/strict'
-import { Browser, sleep } from './browser.mjs'
+import { Browser, sleep, enterRoom } from './browser.mjs'
 
 const browser = await Browser.launch()
 const wait = async (page, fn, label = 'condition') => {
@@ -15,7 +15,7 @@ const wait = async (page, fn, label = 'condition') => {
 try {
   const page = await browser.newPage({ width: 390, height: 844, mobile: true })
   await page.goto(process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188')
-  await page.eval(() => document.querySelector('[aria-label="随机创建房间"]').click())
+  await enterRoom(page)
   await wait(page, () => !!document.querySelector('textarea'), 'room composer')
 
   // Seed 31 messages so the newest page holds 30 and one older page exists.

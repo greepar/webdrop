@@ -14,7 +14,7 @@ type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>
   icon: IconName
   label: string
   tone?: 'default' | 'primary' | 'danger'
-  size?: 'md' | 'sm' | 'lg'
+  size?: 'md' | 'sm' | 'lg' | 'responsive'
 }
 
 // Every icon-only control must have a label; it becomes the accessible name and tooltip.
@@ -25,7 +25,7 @@ export function IconButton({ icon, label, tone = 'default', size = 'md', classNa
     primary: 'border-accent bg-accent text-accent-ink hover:opacity-90 disabled:border-line disabled:bg-surface disabled:text-muted',
     danger: 'border-line text-danger hover:border-danger hover:bg-danger-soft',
   }[tone]
-  const sizeClass = { sm: 'size-9', md: 'size-11', lg: 'size-14' }[size]
+  const sizeClass = { sm: 'size-9', md: 'size-11', lg: 'size-14', responsive: 'size-12 sm:size-14' }[size]
   return (
     <button
       type="button"
