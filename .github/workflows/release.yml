@@ -69,6 +69,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm make g++
           curl -fLsS https://github.com/unicode-org/icu/archive/ddc6b66926bfac6036144ca9902992a0d6d50af9.tar.gz -o "$RUNNER_TEMP/icu.tar.gz"
+          echo "a97ebb39a6092356c5dbb3b9a72db8acf4602e4ce9597a2815f5a2488394ff2a  $RUNNER_TEMP/icu.tar.gz" | sha256sum --check
           mkdir "$RUNNER_TEMP/icu-source"
           tar xzf "$RUNNER_TEMP/icu.tar.gz" -C "$RUNNER_TEMP/icu-source" --strip-components=1
           cd "$RUNNER_TEMP/icu-source/icu4c/source"
@@ -175,6 +176,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm make g++
           curl -fLsS https://github.com/unicode-org/icu/archive/ddc6b66926bfac6036144ca9902992a0d6d50af9.tar.gz -o "$RUNNER_TEMP/icu.tar.gz"
+          echo "a97ebb39a6092356c5dbb3b9a72db8acf4602e4ce9597a2815f5a2488394ff2a  $RUNNER_TEMP/icu.tar.gz" | sha256sum --check
           mkdir "$RUNNER_TEMP/icu-source"
           tar xzf "$RUNNER_TEMP/icu.tar.gz" -C "$RUNNER_TEMP/icu-source" --strip-components=1
           cd "$RUNNER_TEMP/icu-source/icu4c/source"

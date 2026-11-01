@@ -175,3 +175,20 @@ python3 scripts/api-shutdown-smoke.py --binary dist/api/webdrop-linux-x86_64 --v
 带校验参数需安装scripts/requirements-contract.txt。该检查覆盖正常读取的长连接，不代表慢读背压、悬停上传或存储故障下所有请求均能立即退出。
 
 会话显示名可用PATCH /api/v1/session修改（Cookie、Origin、CSRF，displayName非空且≤80 UTF-8字节）；只改会话及后续入房的名字，已有成员快照不变。申请者可DELETE自己的pending申请转为withdrawn，owner应使用reject；撤回不占申请额度。浏览器快速通知验收：`python3 apps/web/tests/isolated.py approval-sse.mjs`。
+
+## OCI容器与GHCR
+
+`Containerfile`使用scratch及Linux静态内嵌程序，默认非root（65532）、8080端口、DATA_DIR=/data。镜像自带只含说明的.env，容器首次启动直接运行，不进入交互配置生成流程；配置通过环境变量传入，/data挂载持久卷。可只读运行根文件系统。
+
+本机验证：
+
+```sh
+pwsh ./scripts/build-api.ps1
+podman build --format oci -t localhost/webdrop:check .
+python3 scripts/container-smoke.py --image localhost/webdrop:check --validate-contract
+podman run -d --name webdrop --read-only --cap-drop=all --security-opt=no-new-privileges -p 8080:8080 -v webdrop-data:/data localhost/webdrop:check
+```
+
+首次访问http://localhost:8080；局域网通过主机实际IP访问。反代HTTPS沿用Host/X-Forwarded-Proto约定，生产加`-e VAPOR_ENV=production`不能代替程序CLI；请在镜像名后指定`serve --env production`。持久卷保存状态/磁盘文件；内存文件仍会随进程退出失效。宿主目录绑定挂载需确保UID65532可写，命名卷由Podman初始化目录权限。
+
+Actions的OCI任务只依赖两个Linux构建，下载本次二进制Artifacts，构建linux/amd64+linux/arm64清单并运行容器HTTP/卷恢复验收。手动构建成功后推送`ghcr.io/greepar/webdrop:sha-<12位提交>`；版本标签触发时另推版本号及latest。尚未成功发布的地址不可作为已可用镜像；实际任务状态见GitHub Actions。Windows/macOS仍由各自任务验收，不影响Linux镜像路径。
