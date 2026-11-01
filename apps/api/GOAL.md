@@ -108,3 +108,5 @@
 - [ ] macOS使用可核对依赖补丁绕过旧系统Foundation缺少Data span API；ARM64的52项测试及发布编译已通过，裸二进制启动暴露较新SerialExecutor默认符号，已加等价nil见证补丁重跑；兼容补丁重复应用检查通过。Windows提供原生Win32存储锁、zlib平台条件和HTTP cookie日期兼容，进一步适配NIOSSL（基于上游PR567，保留证书校验及系统调用错误），x86-64/ARM64原生构建运行待验收。Windows当前打包目标仍为exe+DLL的ZIP，不能视为单可执行文件已实现。
 
 - [x] 平台定向手动构建可独立重跑；显式checkout固定触发SHA。Windows目标要求匹配架构的原生runner，避免静默产生错误架构。
+
+- macOS兼容性调整：macOS15的52项测试及发布编译通过，但裸程序缺少Swift6.2新增并发协议ABI；等价默认方法补丁仍不能修复协议符号，已撤去旧系统补丁。单文件产物现明确要求macOS26，使用对应ARM64/Intel runner重新验收；不承诺macOS13–15兼容。Windows已越过NIOSSL，修正zlib在Windows上unsigned long为32位的问题，继续原生构建验收。

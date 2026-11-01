@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "webdrop-api",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v26)],
     products: [
         .executable(name: "webdrop", targets: ["WebdropServer"]),
         .library(name: "WebdropAPI", targets: ["WebdropAPI"]),

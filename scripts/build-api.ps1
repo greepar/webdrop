@@ -42,7 +42,7 @@ if ($isLinuxTarget) {
     $sdk = if ($Target -eq 'linux-arm64') { 'aarch64-swift-linux-musl' } else { 'x86_64-swift-linux-musl' }
     $options += @('--build-system', 'native', '--swift-sdk', $sdk)
 } elseif (-not $isWindowsTarget) {
-    $triple = if ($Target -eq 'macos-arm64') { 'arm64-apple-macosx13.0' } else { 'x86_64-apple-macosx13.0' }
+    $triple = if ($Target -eq 'macos-arm64') { 'arm64-apple-macosx26.0' } else { 'x86_64-apple-macosx26.0' }
     $options += @('--triple', $triple)
 }
 

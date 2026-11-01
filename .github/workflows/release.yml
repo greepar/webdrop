@@ -138,9 +138,9 @@ jobs:
       matrix:
         include:
           - target: macos-arm64
-            runner: macos-15
+            runner: macos-26
           - target: macos-x86_64
-            runner: macos-15-intel
+            runner: macos-26-intel
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
