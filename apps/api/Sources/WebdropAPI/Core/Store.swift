@@ -66,7 +66,7 @@ actor Store {
     var memoryFiles: [String: Data] = [:]
     var subscriptions: [String: Int] = [:]
     var isStopping = false
-    var eventWaiters: [UUID: EventWaiter] = [:]
+    var eventWaiters: [Foundation.UUID: EventWaiter] = [:]
 
     var now: Double {
         settings.now()
@@ -540,7 +540,7 @@ actor Store {
             }
             let token = randomToken()
             let currentSession = Session(
-                id: UUID().uuidString.lowercased(),
+                id: Foundation.UUID().uuidString.lowercased(),
                 csrf: randomToken(),
                 name: name,
                 expires: now + settings.sessionSeconds
@@ -578,7 +578,7 @@ actor Store {
             throw APIError(429, "CAPACITY", "Retry later", retryAfter: 60)
         }
         let bits = min(settings.maxBits, settings.baseBits + (max(sourceAttempts, deviceAttempts) - 1) / 3)
-        let id = UUID().uuidString.lowercased()
+        let id = Foundation.UUID().uuidString.lowercased()
         let salt = randomToken()
         let input = "webdrop-pow-v1:\(id):\(salt):"
         let challenge = Challenge(
