@@ -34,6 +34,20 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(AssertionError): validate_event('member.left', event)
         validate_event('resync.required', {'eventCursor':'256'})
 
+    def test_approval_event_payloads(self):
+        event = {'eventId':'2','type':'join-request.created','roomId':'00000000-0000-4000-8000-000000000000',
+                 'occurredAt':'2026-11-01T00:00:00Z','data':{
+                     'id':'00000000-0000-4000-8000-000000000001','displayName':'申请人',
+                     'createdAt':'2026-11-01T00:00:00Z','expiresAt':'2026-11-01T00:10:00Z','status':'pending'}}
+        validate_event('join-request.created', event)
+        updated = {**event, 'type':'join-request.updated'}
+        for status in ('approved', 'rejected', 'expired', 'withdrawn'):
+            validate_event('join-request.updated', {**updated, 'data':{**event['data'], 'status':status}})
+        with self.assertRaises(ValidationError): validate_event('join-request.updated', updated)
+        with self.assertRaises(ValidationError):
+            validate_event('join-request.created', {**event, 'data':{**event['data'], 'device':'internal-secret'}})
+        with self.assertRaises(AssertionError): validate_event('join-request.updated', event)
+
     def test_error_enum_and_request_constraints(self):
         schema = SPEC['paths']['/api/v1/rooms']['post']['responses']['409']['content']['application/json']['schema']
         error = {'error':{'code':'CODE_TAKEN','message':'Occupied','requestId':'00000000-0000-4000-8000-000000000000'}}

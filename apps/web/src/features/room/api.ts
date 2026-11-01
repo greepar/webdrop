@@ -5,6 +5,7 @@ import {
   parseMember,
   parseMembership,
   parseRoom,
+  parseRoomCapacity,
   parseRoomItem,
   parseRoomSnapshot,
   parseJoinRequest,
@@ -15,10 +16,16 @@ import {
 } from '@/shared/api/schema'
 import { setCsrfToken } from '@/shared/api/session-token'
 import { asArray, asObject, asString, unwrapData, unwrapList } from '@/shared/api/validate'
-import type { Capabilities, JoinRequest, JoinRequestCreated, Member, Membership, Proof, Room, RoomItem, RoomSnapshot, Session, ShareLink, SharedAsset } from '@/shared/types/domain'
+import type { Capabilities, JoinRequest, JoinRequestCreated, Member, Membership, Proof, Room, RoomCapacity, RoomItem, RoomSnapshot, Session, ShareLink, SharedAsset } from '@/shared/types/domain'
 
 export async function fetchCapabilities(signal?: AbortSignal): Promise<Capabilities> {
   return parseCapabilities(unwrapData(await request('/capabilities', { signal }), 'capabilities'))
+}
+
+// Public room-count snapshot (no session): totals and remaining slots for the home page.
+// Call on demand, never poll; on 429/5xx the home page simply hides the counts.
+export async function fetchRoomCapacity(signal?: AbortSignal): Promise<RoomCapacity> {
+  return parseRoomCapacity(unwrapData(await request('/room-capacity', { signal }), 'roomCapacity'))
 }
 
 // Creates a session (201) or restores the existing cookie session (200). SessionCreated has no
@@ -37,6 +44,15 @@ export async function createOrRestoreSession(displayName: string | undefined, si
 
 export async function fetchSession(signal?: AbortSignal): Promise<Session> {
   const session = parseSession(unwrapData(await request('/session', { signal }), 'session'))
+  setCsrfToken(session.csrfToken)
+  return session
+}
+
+// Renames the current device session. Requires the backend PATCH /session endpoint;
+// until it exists this throws and the UI keeps the old name.
+export async function renameSession(displayName: string, signal?: AbortSignal): Promise<Session> {
+  const payload = await request('/session', { method: 'PATCH', body: { displayName }, signal })
+  const session = parseSession(unwrapData(payload, 'session'))
   setCsrfToken(session.csrfToken)
   return session
 }
@@ -125,14 +141,25 @@ export async function decideJoinRequest(roomId: string, requestId: string, decis
   return parseJoinRequest(unwrapData(await request(`/rooms/${roomId}/join-requests/${requestId}/${decision}`, { method: 'POST', body: {} }), 'joinRequest'))
 }
 
+// Applicant withdraws their own pending request. 204 on success; the entry page then drops the
+// waiting UI. A 404 means the request is already gone (decided/expired/closed) and the UI
+// treats it the same as withdrawn.
+export async function withdrawJoinRequest(roomId: string, requestId: string, signal?: AbortSignal): Promise<void> {
+  await request(`/rooms/${roomId}/join-requests/${requestId}`, { method: 'DELETE', signal })
+}
+
 export async function rotateRoomCode(roomId: string): Promise<Room> {
   return parseRoom(unwrapData(await request(`/rooms/${roomId}/code/rotate`, { method: 'POST' }), 'room'))
 }
 
 export async function createUpload(roomId: string, file: File, idempotencyKey: string) {
+  // The server rejects empty/non-MIME contentType (400 INVALID_INPUT). Some Safari recordings
+  // report an empty type; fall back to a generic binary instead of failing the upload.
+  const rawType = (file.type || '').split(';')[0]?.trim() ?? ''
+  const contentType = /^[\x21-\x7e]+\/[\x21-\x7e]+$/.test(rawType) ? rawType : 'application/octet-stream'
   const payload = await request(`/rooms/${roomId}/uploads`, {
     method: 'POST',
-    body: { filename: file.name, sizeBytes: file.size, contentType: file.type || 'application/octet-stream' },
+    body: { filename: file.name, sizeBytes: file.size, contentType },
     idempotencyKey,
   })
   const data = asObject(unwrapData(payload, 'upload'), 'upload')

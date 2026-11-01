@@ -75,7 +75,8 @@ export class Browser {
 }
 
 // Types a random room code into the four boxes and lets the page auto-join; if the room does not
-// exist yet, falls back to the create button. Returns the code used.
+// exist yet, falls back to the create button. Returns the code used. Creation now enters directly
+// from the offer button (no intermediate create panel).
 export async function enterRoom(page, code = String(Math.floor(Math.random() * 9000) + 1000)) {
   await page.eval((value) => {
     const inputs = [...document.querySelectorAll('[role=group][aria-label^="房间号"] input')]
@@ -95,16 +96,25 @@ export async function enterRoom(page, code = String(Math.floor(Math.random() * 9
     if (state.offer) break
     await sleep(100)
   }
-  // The offer opens the create panel; the panel's own button submits.
   await page.eval(() => document.querySelector('[data-create-room]')?.click())
-  for (let i = 0; i < 50; i++) {
-    if (await page.eval(() => [...document.querySelectorAll('button')].some(b => b.textContent.trim() === '创建'))) break
-    await sleep(100)
-  }
-  await page.eval(() => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '创建')?.click())
   for (let i = 0; i < 200; i++) {
     if (await page.eval(() => !!document.querySelector('textarea'))) return code
     await sleep(100)
   }
   throw Error('enterRoom failed: ' + (await page.eval(() => document.body.innerText.slice(0, 200))))
+}
+
+// Types a code and submits the join form directly (no auto-create fallback). Used to join an
+// existing room from a second session.
+export async function joinRoom(page, code) {
+  // After a CODE_TAKEN the page keeps the code and the error; a fresh visit clears both.
+  await page.goto(process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5191')
+  for (let i = 0; i < 50; i++) { if (await page.eval(() => !!document.querySelector('[role=group] input'))) break; await sleep(100) }
+  await page.eval(() => document.querySelector('[role=group] input')?.focus())
+  for (const ch of String(code)) { await page.send('Input.insertText', { text: ch }); await sleep(120) }
+  for (let i = 0; i < 200; i++) {
+    if (await page.eval(() => !!document.querySelector('textarea'))) return code
+    await sleep(100)
+  }
+  throw Error('joinRoom failed: ' + (await page.eval(() => document.body.innerText.slice(0, 200))))
 }

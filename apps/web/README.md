@@ -22,11 +22,11 @@ npm run build:web
 VITE_API_MODE=live API_PROXY_TARGET=http://127.0.0.1:8080 npm run dev:web
 ```
 
-后端另行启动，见 API README。浏览器访问 `/api/v1`；Vite 将 `/api/*`、`/d/*` 转发到 API_PROXY_TARGET。后端 PUBLIC_ORIGIN、WEB_ORIGINS 必须匹配实际浏览器来源。VITE_API_BASE_URL 默认 `/api/v1`，VITE_* 会进入浏览器产物，不能存放秘密。
+后端另行启动，见 API README。浏览器访问 `/api/v1`；Vite 将 `/api/*`、`/d/*` 转发到 API_PROXY_TARGET。代理保留浏览器Host，默认同源无需额外来源配置；直连跨域API时在后端CORS_ALLOWED_ORIGINS列出前端来源。VITE_API_BASE_URL 默认 `/api/v1`，VITE_* 会进入浏览器产物，不能存放秘密。
 
 ## 构建与预览
 
-生产产物在 `apps/web/dist`，不包含开发 mock 模块。构建后可以本地验收：
+生产产物在 `apps/web/dist`，不包含开发 mock 模块。默认发布使用根目录的`pwsh -File scripts/build-api.ps1`构建并嵌入后端二进制，无需另行部署dist；下列preview仅用于独立前端检查。构建后可以本地验收：
 
 ```sh
 API_PROXY_TARGET=http://127.0.0.1:8080 npm run preview --workspace @webdrop/web -- --host 127.0.0.1 --port 4173

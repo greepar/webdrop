@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "WebDrop API",
-    "version": "0.5.0",
+    "version": "0.6.1",
     "description": "Implemented Swift backend. protocol.md defines PoW encoding, limits, event payloads and lifecycle. Small files use bounded ephemeral memory; see protocol.md for restart semantics. errors.md defines recovery; x-maxUtf8Bytes is enforced by the contract validator."
   },
   "servers": [
@@ -232,7 +232,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           }
         ],
         "responses": {
@@ -769,6 +769,317 @@
             ]
           }
         }
+      },
+      "patch": {
+        "operationId": "updateSession",
+        "summary": "Update session display name",
+        "description": "Cookie + Origin + CSRF required. Updates only the session name; existing members and pending requests retain their name snapshots. Returns the full current session including memberships.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Session"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unexpected framework or infrastructure failure; structured Error. Business failures are enumerated by status. See errors.md.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_INPUT / INVALID_JSON. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INVALID_INPUT",
+                                "INVALID_JSON"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "INVALID_INPUT",
+              "INVALID_JSON"
+            ]
+          },
+          "401": {
+            "description": "SESSION_REQUIRED. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "SESSION_REQUIRED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "SESSION_REQUIRED"
+            ]
+          },
+          "413": {
+            "description": "HTTP_413. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "HTTP_413"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "HTTP_413"
+            ]
+          },
+          "415": {
+            "description": "JSON_REQUIRED. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "JSON_REQUIRED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "JSON_REQUIRED"
+            ]
+          },
+          "429": {
+            "description": "RATE_LIMITED. See errors.md for client recovery.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "RATE_LIMITED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "RATE_LIMITED"
+            ]
+          },
+          "500": {
+            "description": "INTERNAL_ERROR. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INTERNAL_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "INTERNAL_ERROR"
+            ]
+          },
+          "403": {
+            "description": "CSRF_INVALID / ORIGIN_FORBIDDEN. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CSRF_INVALID",
+                                "ORIGIN_FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "CSRF_INVALID",
+              "ORIGIN_FORBIDDEN"
+            ]
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "displayName"
+                ],
+                "properties": {
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "x-maxUtf8Bytes": 80
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/pow/challenges": {
@@ -790,7 +1101,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -1095,7 +1406,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -1509,7 +1820,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -2236,7 +2547,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -2576,7 +2887,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -2892,7 +3203,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -3602,7 +3913,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -4273,7 +4584,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -4671,7 +4982,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -4987,7 +5298,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -5376,7 +5687,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -5725,7 +6036,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -6138,7 +6449,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -6792,7 +7103,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -7503,7 +7814,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -9340,6 +9651,12 @@
                   },
                   "resync.required": {
                     "$ref": "#/components/schemas/EventCursor"
+                  },
+                  "join-request.created": {
+                    "$ref": "#/components/schemas/Event"
+                  },
+                  "join-request.updated": {
+                    "$ref": "#/components/schemas/Event"
                   }
                 }
               }
@@ -9591,10 +9908,17 @@
                     "api"
                   ]
                 }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "description": "Embedded frontend index page, only in packaged web builds."
+                }
               }
             }
           }
-        }
+        },
+        "description": "With embedded production frontend, serves HTML. API-only/development builds retain the JSON service descriptor. Business API, downloads and health probes never use SPA fallback."
       }
     },
     "/api/v1/rooms/{roomId}/join-requests": {
@@ -10187,6 +10511,355 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "withdrawJoinRequest",
+        "summary": "Withdraw a pending join request",
+        "description": "Applicant only. Pending/unexpired -> withdrawn (204), terminal -> 409 JOIN_REQUEST_STATE; owner must reject instead (403 FORBIDDEN). Emits join-request.updated once.",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "roomId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Unexpected framework or infrastructure failure; structured Error. Business failures are enumerated by status. See errors.md.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_INPUT / INVALID_JSON. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INVALID_INPUT",
+                                "INVALID_JSON"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "INVALID_INPUT",
+              "INVALID_JSON"
+            ]
+          },
+          "401": {
+            "description": "SESSION_REQUIRED. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "SESSION_REQUIRED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "SESSION_REQUIRED"
+            ]
+          },
+          "403": {
+            "description": "CSRF_INVALID / ORIGIN_FORBIDDEN / FORBIDDEN. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "CSRF_INVALID",
+                                "ORIGIN_FORBIDDEN",
+                                "FORBIDDEN"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "CSRF_INVALID",
+              "ORIGIN_FORBIDDEN",
+              "FORBIDDEN"
+            ]
+          },
+          "404": {
+            "description": "NOT_FOUND. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "413": {
+            "description": "HTTP_413. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "HTTP_413"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "HTTP_413"
+            ]
+          },
+          "415": {
+            "description": "JSON_REQUIRED. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "JSON_REQUIRED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "JSON_REQUIRED"
+            ]
+          },
+          "429": {
+            "description": "RATE_LIMITED. See errors.md for client recovery.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "RATE_LIMITED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "RATE_LIMITED"
+            ]
+          },
+          "500": {
+            "description": "INTERNAL_ERROR. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INTERNAL_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "INTERNAL_ERROR"
+            ]
+          },
+          "409": {
+            "description": "JOIN_REQUEST_STATE or ROOM_FULL; refresh request/room before retry.",
+            "x-error-codes": [
+              "JOIN_REQUEST_STATE",
+              "ROOM_FULL"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Withdrawn; no response body."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/rooms/{roomId}/join-requests/{requestId}/approve": {
@@ -10217,7 +10890,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -10584,7 +11257,7 @@
               "type": "string",
               "format": "uri"
             },
-            "description": "Must be an explicitly configured WEB_ORIGINS origin."
+            "description": "Must match the current request origin, or be explicitly listed in CORS_ALLOWED_ORIGINS. See protocol.md for proxy and CORS preflight rules."
           },
           {
             "name": "X-CSRF-Token",
@@ -10922,6 +11595,212 @@
           }
         }
       }
+    },
+    "/api/v1/room-capacity": {
+      "get": {
+        "operationId": "getRoomCapacity",
+        "summary": "Get aggregate room and code capacity",
+        "description": "Public, no session required; expires stale rooms before counting. availableRooms=min(max(0,maxRooms-activeRooms),availableCodes). Does not reserve a slot or include caller-specific quotas/rate limits. See room-capacity.md.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RoomCapacity"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unexpected framework or infrastructure failure; structured Error. Business failures are enumerated by status. See errors.md.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_INPUT / INVALID_JSON. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INVALID_INPUT",
+                                "INVALID_JSON"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "INVALID_INPUT",
+              "INVALID_JSON"
+            ]
+          },
+          "413": {
+            "description": "HTTP_413. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "HTTP_413"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "HTTP_413"
+            ]
+          },
+          "415": {
+            "description": "JSON_REQUIRED. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "JSON_REQUIRED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "JSON_REQUIRED"
+            ]
+          },
+          "429": {
+            "description": "RATE_LIMITED. See errors.md for client recovery.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "RATE_LIMITED"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "RATE_LIMITED"
+            ]
+          },
+          "500": {
+            "description": "INTERNAL_ERROR. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "INTERNAL_ERROR"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "INTERNAL_ERROR"
+            ]
+          }
+        }
+      }
     }
   },
   "components": {
@@ -11020,6 +11899,16 @@
             "type": "integer",
             "const": 2,
             "description": "SSE heartbeat interval in seconds."
+          },
+          "maxRooms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "maxOwnedRooms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
           }
         },
         "required": [
@@ -11030,7 +11919,9 @@
           "roomQuotaBytes",
           "roomIdleSeconds",
           "linkDefaultSeconds",
-          "heartbeatSeconds"
+          "heartbeatSeconds",
+          "maxRooms",
+          "maxOwnedRooms"
         ]
       },
       "Member": {
@@ -11752,7 +12643,9 @@
               "item.deleted",
               "upload.updated",
               "room.updated",
-              "room.closed"
+              "room.closed",
+              "join-request.created",
+              "join-request.updated"
             ]
           },
           "roomId": {
@@ -11853,6 +12746,55 @@
               },
               "data": {
                 "$ref": "#/components/schemas/ResourceRemoved"
+              }
+            }
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "join-request.created"
+              },
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/JoinRequest"
+                  },
+                  {
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "pending"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "join-request.updated"
+              },
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/JoinRequest"
+                  },
+                  {
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "approved",
+                          "rejected",
+                          "expired",
+                          "withdrawn"
+                        ]
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
@@ -12016,7 +12958,8 @@
               "pending",
               "approved",
               "rejected",
-              "expired"
+              "expired",
+              "withdrawn"
             ]
           }
         },
@@ -12026,6 +12969,57 @@
           "createdAt",
           "expiresAt",
           "status"
+        ]
+      },
+      "RoomCapacity": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxRooms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "activeRooms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "availableRooms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxOwnedRooms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "roomCodeLength": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 8
+          },
+          "codeCapacity": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "occupiedCodes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "availableCodes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "maxRooms",
+          "activeRooms",
+          "availableRooms",
+          "maxOwnedRooms",
+          "roomCodeLength",
+          "codeCapacity",
+          "occupiedCodes",
+          "availableCodes"
         ]
       }
     }

@@ -48,8 +48,8 @@ def stop(process):
         process.wait(timeout=3)
 
 
-def run(script):
-    binary = Path(os.environ.get('WEBDROP_API_BINARY', ROOT / 'apps/api/.build/debug/webdrop'))
+def run(script, cross_origin=False):
+    binary = Path(os.environ.get('WEBDROP_API_BINARY', ROOT / 'apps/api/.build/debug/webdrop')).resolve()
     if not binary.is_file():
         raise RuntimeError('Build the API first: npm run build:api')
     test = (TESTS / script).resolve()
@@ -61,14 +61,19 @@ def run(script):
             frontend_port = port()
         url = f'http://127.0.0.1:{frontend_port}'
         env = os.environ.copy()
-        env.update(DATA_DIR=str(Path(temporary) / 'data'), PUBLIC_ORIGIN=url, WEB_ORIGINS=url,
+        env.update(DATA_DIR=str(Path(temporary) / 'data'),
                    VITE_API_MODE='live', API_PROXY_TARGET=f'http://127.0.0.1:{backend_port}',
-                   WEBDROP_TEST_URL=url)
+                   WEBDROP_TEST_URL=url,
+                   CORS_ALLOWED_ORIGINS=url if cross_origin else '',
+                   VITE_API_BASE_URL=f'http://127.0.0.1:{backend_port}/api/v1' if cross_origin else '/api/v1')
+        # Explicit config for this disposable service: bypass interactive first-run setup
+        # without creating or changing a developer's repository .env.
+        (Path(temporary) / '.env').write_text('# Test configuration is supplied through process environment.\n')
         processes = []
         log_path = Path(temporary) / 'services.log'
         try:
             with log_path.open('w') as log:
-                processes.append(subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', str(backend_port)], cwd=ROOT, env=env, stdout=log, stderr=log, start_new_session=True))
+                processes.append(subprocess.Popen([str(binary), 'serve', '--hostname', '127.0.0.1', '--port', str(backend_port)], cwd=temporary, env=env, stdout=log, stderr=log, start_new_session=True))
                 processes.append(subprocess.Popen(['npm', 'run', 'dev:web', '--', '--host', '127.0.0.1', '--port', str(frontend_port)], cwd=ROOT, env=env, stdout=log, stderr=log, start_new_session=True))
                 ready(f'{url}/api/v1/capabilities', processes)
                 print(f'CHECK {test.name} at {url} (disposable data)', flush=True)
@@ -88,9 +93,10 @@ def run(script):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('scripts', nargs='+', help='Check filenames in apps/web/tests; each gets fresh services')
+    parser.add_argument('--cross-origin', action='store_true', help='Use a separate API origin and explicit CORS allowlist')
     args = parser.parse_args()
     for script in args.scripts:
-        run(script)
+        run(script, args.cross_origin)
 
 
 if __name__ == '__main__':

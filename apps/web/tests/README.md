@@ -2,7 +2,7 @@
 
 要求 Node 24、本机 Chrome 和独立测试 API（不要使用生产服务）。不下载浏览器，不使用 mock。
 
-1. 按 API README 用独立 DATA_DIR 启动服务，设置 PUBLIC_ORIGIN、WEB_ORIGINS 为测试前端地址。
+1. 按 API README 用独立 DATA_DIR 启动服务，默认同源，不需要额外origin环境变量；代理保留Host。
 2. 设置 VITE_API_MODE=live、API_PROXY_TARGET 启动前端。
 3. 执行：
 
@@ -23,7 +23,7 @@ live-smoke 检查独立会话加入、SSE 文字/文件、下载字节、暗色�
 
 客户端事件边界：`WEBDROP_TEST_URL=http://127.0.0.1:5188 node apps/web/tests/event-validation.mjs`。要求 Vite 开发服务器（动态导入源模块）；使用明确的 EventSource 替身检查重复与非法事件，属于客户端检查，不是真实 SSE 联调。
 
-完整顺序运行：`WEBDROP_TEST_URL=http://127.0.0.1:5190 node apps/web/tests/run-live.mjs`。建议专用前端 5190 代理专用 API 18190，后端使用独立临时 DATA_DIR，PUBLIC_ORIGIN 与 WEB_ORIGINS 对应 5190。不要反复使用人工预览服务运行整套测试；真实限流依然有效，完整套件不保证可立即重复。
+完整顺序运行：`WEBDROP_TEST_URL=http://127.0.0.1:5190 node apps/web/tests/run-live.mjs`。建议专用前端 5190 代理专用 API 18190，后端使用独立临时 DATA_DIR，Vite代理保留测试前端Host。不要反复使用人工预览服务运行整套测试；真实限流依然有效，完整套件不保证可立即重复。
 
 媒体检查：`WEBDROP_TEST_URL=http://127.0.0.1:5190 node apps/web/tests/media-smoke.mjs`，上传生成 PNG 与仓库自制 MP4，验证实际图片尺寸、视频尺寸与播放时间推进；随后通过 CDP 注入资源 410，验证错误提示及下载入口。Chrome 播放通过不代表 iOS Safari 通过。
 
@@ -88,3 +88,9 @@ python3 apps/web/tests/isolated.py upload-fault.mjs upload-timeout.mjs session-r
 主题状态：`python3 apps/web/tests/isolated.py theme-state.mjs`。模拟系统深浅色，验证手动覆盖、刷新持久化、同源标签页 storage 同步、后台返回后系统偏好更新、错误/分享路由主题及禁用 localStorage 时 DOMContentLoaded 的暗色属性。不以 DOM 属性检查代替首帧闪烁录像。
 
 PoW 服务端拒绝：`python3 apps/web/tests/isolated.py pow-rejection.mjs`，真实 Worker 求解后在请求层修改 nonce，验证真实服务器拒绝、不产生成员关系，新挑战重试才进入。pow-lifecycle 同时覆盖明确替身条件下的过期挑战和卸载清理，不等于真实 120 秒挑战到期验收。
+
+隔离运行器会在临时启动目录提供仅含注释的`.env`，配置通过进程环境传入，不触发首次生成后退出，也不改写仓库中的人工配置。
+
+可用`python3 apps/web/tests/isolated.py --cross-origin lifecycle-smoke.mjs`在独立API来源运行浏览器验收，运行器为临时后端配置明确CORS来源，并让前端直连API；默认仍通过保留Host的同源开发代理。
+
+跨域文件链路专项：`python3 apps/web/tests/isolated.py --cross-origin cors-smoke.mjs`，验证实际跨域XHR上传、带Cookie私有下载、Range及Content-Range响应头读取，不依赖删除确认文案。

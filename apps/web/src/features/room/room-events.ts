@@ -1,9 +1,9 @@
 // Live room events over SSE (protocol.md §SSE). EventSource carries the session cookie and resends
 // Last-Event-ID automatically when the browser reconnects. The server ends each stream after ~120s;
 // EventSource then reconnects on its own. Events are de-duplicated by eventId by the consumer.
-import { parseMember, parseRoom, parseRoomItem } from '@/shared/api/schema'
+import { parseJoinRequest, parseMember, parseRoom, parseRoomItem } from '@/shared/api/schema'
 import { env } from '@/shared/config/env'
-import type { Room, RoomItem } from '@/shared/types/domain'
+import type { JoinRequest, Room, RoomItem } from '@/shared/types/domain'
 
 export type RoomEventHandlers = {
   onItemCreated: (item: RoomItem) => void
@@ -11,6 +11,10 @@ export type RoomEventHandlers = {
   onMembersChanged: () => void
   onRoomUpdated: (room: Room) => void
   onRoomClosed: () => void
+  // Join-request arrivals/decisions. Payload carries the request; the owner list refresh decides the
+  // badge count (never trust the event alone). Unknown until the backend emits it: absence of this
+  // event must not hide applications (callers keep their slower refresh as fallback).
+  onJoinRequestChanged: (request: JoinRequest) => void
   // The server could not resume from the cursor: take a fresh snapshot, then resubscribe.
   onResyncRequired: () => void
   onConnectionChange: (state: 'connecting' | 'open' | 'reconnecting') => void
@@ -90,6 +94,11 @@ export function subscribeRoomEvents(roomId: string, cursor: string, handlers: Ro
     if (room.id !== roomId) throw new Error('Room mismatch')
     handlers.onRoomUpdated(room)
   })
+  const joinRequestChanged = (data: unknown) => {
+    handlers.onJoinRequestChanged(parseJoinRequest(data))
+  }
+  listen('join-request.created', joinRequestChanged)
+  listen('join-request.updated', joinRequestChanged)
   listen('room.closed', (data) => {
     if (parseDeletedId(data) !== roomId) throw new Error('Room mismatch')
     closed = true

@@ -28,10 +28,14 @@ export function RoomCodeInput({ value, length, disabled, error, hint, canCreate,
     if (value !== normalised) onChange(normalised)
   }, [value, length, onChange])
 
-  const focusBox = (index: number) => {
-    const target = boxes.current[Math.max(0, Math.min(index, length - 1))]
-    target?.focus()
-    target?.select()
+  const focusBox = (index: number, select = true) => {
+    if (index < 0 || index >= length) return
+    const target = boxes.current[index]
+    if (!target) return
+    target.focus({ preventScroll: true })
+    // Mobile: focusing with select() raises the text-selection handles (the reported bug).
+    // Desktop keeps select() so typing over an old digit replaces it.
+    if (select && !window.matchMedia('(any-pointer: coarse)').matches) target.select()
   }
 
   const write = (next: string[]) => {
@@ -42,6 +46,12 @@ export function RoomCodeInput({ value, length, disabled, error, hint, canCreate,
     const next = [...digits]
     next[index] = digit
     write(next)
+    // Last box filled: dismiss the keyboard instead of clamping focus back onto itself
+    // (that self-select is what raised the handles on mobile).
+    if (digit && index + 1 >= length) {
+      boxes.current[index]?.blur()
+      return
+    }
     if (digit) focusBox(index + 1)
   }
 
@@ -66,7 +76,9 @@ export function RoomCodeInput({ value, length, disabled, error, hint, canCreate,
       next[start + offset] = char
     })
     write(next)
-    focusBox(start + chars.length)
+    const landed = start + chars.length
+    if (landed >= length) boxes.current[length - 1]?.blur()
+    else focusBox(landed)
   }
 
   const onKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {

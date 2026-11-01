@@ -3,6 +3,7 @@ import type {
   JoinRequest,
   JoinRequestCreated,
   Capabilities,
+  RoomCapacity,
   Challenge,
   Member,
   Membership,
@@ -32,11 +33,27 @@ export function parseCapabilities(value: unknown): Capabilities {
     roomCodeLength: asNumber(o.roomCodeLength, 'capabilities.roomCodeLength'),
     allowedRoomCodeLengths: asArray(o.allowedRoomCodeLengths, 'capabilities.allowedRoomCodeLengths', (v) => asNumber(v, 'length')),
     maxDevices: asNumber(o.maxDevices, 'capabilities.maxDevices'),
+    maxRooms: asNumber(o.maxRooms, 'capabilities.maxRooms'),
+    maxOwnedRooms: asNumber(o.maxOwnedRooms, 'capabilities.maxOwnedRooms'),
     maxFileBytes: asNumber(o.maxFileBytes, 'capabilities.maxFileBytes'),
     roomQuotaBytes: asNumber(o.roomQuotaBytes, 'capabilities.roomQuotaBytes'),
     roomIdleSeconds: asNumber(o.roomIdleSeconds, 'capabilities.roomIdleSeconds'),
     linkDefaultSeconds: asNumber(o.linkDefaultSeconds, 'capabilities.linkDefaultSeconds'),
     heartbeatSeconds: asNumber(o.heartbeatSeconds, 'capabilities.heartbeatSeconds'),
+  }
+}
+
+export function parseRoomCapacity(value: unknown): RoomCapacity {
+  const o = asObject(value, 'roomCapacity')
+  return {
+    maxRooms: asNumber(o.maxRooms, 'roomCapacity.maxRooms'),
+    activeRooms: asNumber(o.activeRooms, 'roomCapacity.activeRooms'),
+    availableRooms: asNumber(o.availableRooms, 'roomCapacity.availableRooms'),
+    maxOwnedRooms: asNumber(o.maxOwnedRooms, 'roomCapacity.maxOwnedRooms'),
+    roomCodeLength: asNumber(o.roomCodeLength, 'roomCapacity.roomCodeLength'),
+    codeCapacity: asNumber(o.codeCapacity, 'roomCapacity.codeCapacity'),
+    occupiedCodes: asNumber(o.occupiedCodes, 'roomCapacity.occupiedCodes'),
+    availableCodes: asNumber(o.availableCodes, 'roomCapacity.availableCodes'),
   }
 }
 
@@ -78,7 +95,7 @@ export function parseJoinRequest(value: unknown): JoinRequest {
     displayName: asString(o.displayName, 'joinRequest.displayName'),
     createdAt: asString(o.createdAt, 'joinRequest.createdAt'),
     expiresAt: asString(o.expiresAt, 'joinRequest.expiresAt'),
-    status: asOneOf(o.status, ['pending', 'approved', 'rejected', 'expired'] as const, 'joinRequest.status'),
+    status: asOneOf(o.status, ['pending', 'approved', 'rejected', 'expired', 'withdrawn'] as const, 'joinRequest.status'),
   }
 }
 

@@ -16,16 +16,16 @@ let package = Package(
         .executableTarget(name: "WebdropServer", dependencies: ["WebdropAPI"]),
         .target(
             name: "WebdropAPI",
-            dependencies: [.product(name: "Vapor", package: "vapor"), .product(name: "Crypto", package: "swift-crypto")],
-            exclude: [
-                "Features/Devices/README.md", "Features/Clipboard/README.md",
-                "Features/Transfers/README.md", "Features/Links/README.md",
-                "Infrastructure/README.md",
+            dependencies: [
+                .product(name: "Vapor", package: "vapor"), .product(name: "Crypto", package: "swift-crypto"),
             ]
         ),
-        .testTarget(name: "WebdropAPITests", dependencies: [
-            "WebdropAPI",
-            .product(name: "VaporTesting", package: "vapor"),
-        ]),
+        .testTarget(
+            name: "WebdropAPITests",
+            dependencies: [
+                "WebdropAPI",
+                .product(name: "VaporTesting", package: "vapor"),
+            ]
+        ),
     ]
 )

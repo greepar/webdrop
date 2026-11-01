@@ -15,9 +15,12 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: true,
       proxy: {
-        '/api': { target: apiTarget, changeOrigin: true },
+        // Keep the browser Host (changeOrigin: false) so the backend's same-origin check
+        // sees Origin == Host-derived origin on LAN (e.g. 192.168.x.x:5173). changeOrigin:true
+        // rewrites Host to 127.0.0.1:8080 and breaks LAN with ORIGIN_FORBIDDEN.
+        '/api': { target: apiTarget, changeOrigin: false },
         // Raw public file links keep their backend status and byte response.
-        '/d/': { target: apiTarget, changeOrigin: true },
+        '/d/': { target: apiTarget, changeOrigin: false },
       },
     },
   }

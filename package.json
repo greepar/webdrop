@@ -17,7 +17,10 @@
     "build:api": "cd apps/api && swift build -j 4",
     "check": "npm run check --workspace @webdrop/web",
     "lint": "npm run lint --workspace @webdrop/web",
-    "test": "npm run check && npm run lint && npm run test:api",
-    "test:api": "cd apps/api && swift test -j 4"
-  }
+    "test": "npm run check && npm run lint && npm run check:swift && npm run test:api",
+    "test:api": "cd apps/api && swift test -j 4",
+    "format:swift": "pwsh -NoProfile -File scripts/format-swift.ps1",
+    "check:swift": "pwsh -NoProfile -File scripts/format-swift.ps1 -Check"
+  },
+  "license": "MIT"
 }

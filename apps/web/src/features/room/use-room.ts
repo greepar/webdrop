@@ -19,6 +19,9 @@ export type RoomState = {
   // Items that arrived after the initial snapshot; only these get the short entrance fade.
   freshIds: string[]
   connection: ConnectionState
+  // Bumped on every join-request SSE arrival so the owner badge refreshes even when the
+  // dialog (and its own poll) is not mounted. The count itself still comes from the list API.
+  joinRequestTick: number
 }
 
 // Snapshot first (room, members, newest page), then subscribe from the snapshot's eventCursor. Items are
@@ -53,6 +56,7 @@ export function useRoom(roomId: string) {
     gone: false,
     connection: 'idle',
     freshIds: [],
+    joinRequestTick: 0,
   })
   const seen = useRef(new Set<string>())
   const deleted = useRef(new Set<string>())
@@ -72,6 +76,7 @@ export function useRoom(roomId: string) {
   }, [])
 
   const streamRef = useRef<RoomEventStream | null>(null)
+  const reconnectTimer = useRef(0)
 
   const membersRequest = useRef<AbortController | null>(null)
   const detailsRequest = useRef<AbortController | null>(null)
@@ -108,17 +113,43 @@ export function useRoom(roomId: string) {
         setState((prev) => ({ ...prev, items: prev.items.filter((i) => i.id !== itemId) }))
       },
       onMembersChanged: reloadMembers,
+      onJoinRequestChanged: () => {
+        setState((prev) => ({ ...prev, joinRequestTick: prev.joinRequestTick + 1 }))
+      },
       onRoomUpdated: (room) => {
         detailsRequest.current?.abort()
         setState((prev) => ({ ...prev, room: prev.room ? { ...prev.room, ...room } : null }))
       },
       onRoomClosed: () => setState((prev) => ({ ...prev, gone: true, connection: 'idle' })),
       onResyncRequired: () => setReloadToken((n) => n + 1),
-      onConnectionChange: (connection) => setState((prev) => (prev.connection === connection ? prev : { ...prev, connection })),
+      onConnectionChange: (connection) => {
+        if (connection === 'reconnecting') {
+          // Debounce: only show the banner if the outage sticks. Sub-second SSE blips
+          // (e.g. app switch) recover silently without flashing the header.
+          const token = window.setTimeout(() => {
+            setState((prev) => (prev.connection === 'connecting' ? { ...prev, connection: 'reconnecting' } : prev))
+          }, 600)
+          reconnectTimer.current = token
+          setState((prev) => {
+            if (prev.connection === 'reconnecting') return prev
+            if (prev.connection === 'open' || prev.connection === 'mock') return prev
+            return { ...prev, connection: 'connecting' }
+          })
+          return
+        }
+        if (reconnectTimer.current) {
+          window.clearTimeout(reconnectTimer.current)
+          reconnectTimer.current = 0
+        }
+        setState((prev) => (prev.connection === connection ? prev : { ...prev, connection }))
+      },
     })
   }, [roomId, addItems, reloadMembers])
 
   // Snapshot load. Re-runs on reloadToken changes (a resync or an explicit refresh).
+  // Lifecycle: unmount closes the SSE stream and aborts in-flight reads, so leaving the room page
+  // never keeps the room online for the home recovery entry. Visibility/focus changes re-read the
+  // session + snapshot via the caller's convergence (RoomPage), never resurrecting a left room.
   useEffect(() => {
     const controller = new AbortController()
     snapshotGeneration.current += 1
@@ -156,6 +187,7 @@ export function useRoom(roomId: string) {
     streamRef.current = null
     membersRequest.current?.abort()
     detailsRequest.current?.abort()
+    if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current)
   }, [])
 
   const refresh = useCallback(() => setReloadToken((n) => n + 1), [])

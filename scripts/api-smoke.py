@@ -9,11 +9,12 @@ from urllib.parse import urlsplit
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--url', default='http://127.0.0.1:18080')
-parser.add_argument('--origin', default='http://localhost:5173')
+parser.add_argument('--origin', help='Same origin as --url by default.')
 parser.add_argument('--file-bytes', type=int, default=200000, help='Use >1048576 to exercise disk storage.')
 parser.add_argument('--validate-contract', action='store_true', help='Validate JSON responses against OpenAPI (requires jsonschema).')
 args = parser.parse_args()
 url = urlsplit(args.url)
+args.origin = args.origin or f'{url.scheme}://{url.netloc}'
 
 if args.validate_contract:
     from contract_validator import validate_response, validate_request, validate_event
@@ -73,6 +74,14 @@ class Client:
     def post(self, path, body, expected=201):
         return self.request('POST', path, body, expected, {'Idempotency-Key': str(uuid.uuid4())})[2]['data']
 
+public = connection()
+public.request('GET', '/api/v1/room-capacity')
+public_response = public.getresponse()
+assert public_response.status == 200
+capacity_before = json.loads(public_response.read())
+validate_response('GET', '/api/v1/room-capacity', 200, capacity_before)
+public.close()
+assert capacity_before['data']['availableRooms'] > 0
 owner = Client('界' * 26 + 'ab')
 owner.request('POST', '/api/v1/sessions', {'displayName': '界' * 27}, expected=400)
 owner.request('GET', '/api/v1/capabilities')
@@ -81,6 +90,9 @@ guest = Client('Phone')
 room = owner.room(password='private room 🔑')['room']
 assert room['hasPassword'] is True
 rid = room['id']
+capacity = owner.request('GET', '/api/v1/room-capacity')[2]['data']
+assert capacity['activeRooms'] == capacity_before['data']['activeRooms'] + 1
+assert capacity['availableRooms'] == min(max(0, capacity['maxRooms'] - capacity['activeRooms']), capacity['availableCodes'])
 assert guest.room(room['code'], join=True, expected=403)['error']['code'] == 'ROOM_PASSWORD_INVALID'
 owner.request('PATCH', f'/api/v1/rooms/{rid}', {'approvalRequired':True})
 pending = guest.room(room['code'], join=True, password='private room 🔑', expected=202)
@@ -172,6 +184,7 @@ try:
     owner.request('DELETE', f'/api/v1/rooms/{rid}', expected=404)
     owner.request('GET', f'/api/v1/rooms/{rid}/events', expected=404)
     owner.request('GET', public_path, expected=410)
+    assert owner.request('GET', '/api/v1/room-capacity')[2]['data']['activeRooms'] == capacity_before['data']['activeRooms']
     print('PASS: owner approval, room passwords, sessions, CSRF, PoW, idempotency, room permissions, chat, streaming upload, SHA256, Range/HEAD, public links, SSE, kick and close revocation')
 except BaseException:
     try: owner.request('DELETE', f'/api/v1/rooms/{rid}', expected=204)

@@ -1,105 +1,64 @@
-# Webdrop
+# WebDrop
 
-用于跨设备分享剪贴板、小文件、图片和视频的 Web 应用。前后端分离，使用同一个仓库管理。
+跨设备分享文字、文件、图片和视频。React前端与Swift/Vapor后端按[API契约](packages/contracts/README.md)协作，支持房间密码、加入审批、PoW、实时消息和临时分享链接。
 
-**当前状态**：Swift 后端已实现匿名会话、DropRoom、PoW、聊天内容、流式上传、下载、临时短链和 SSE；前端仍为工程骨架，业务 UI 待独立实现。前后端按契约接入。
+## 单文件发布
 
-## 技术栈
+需要Node.js、PowerShell7.2+、Swift6.4.2及匹配的Linux Static SDK。首次安装依赖与SDK见[后端说明](apps/api/README.md)。仓库根目录执行：
 
-- 前端：React 19、TypeScript、Vite、React Router、Tailwind CSS 4。
-- UI：自绘组件和统一主题变量，不引入成套 UI 组件库。
-- 后端：Swift 6.4、Vapor 4、Swift Testing / VaporTesting。
-- 工程：npm workspaces 管理前端；Swift Package Manager 独立管理后端；两边都提交依赖锁文件。
-- 后端当前使用单进程本地持久化快照与文件存储，实时通知使用 SSE；数据库/对象存储扩展和 WebRTC 尚未接入。
-
-## 项目结构
-
-```text
-webdrop/
-├── apps/
-│   ├── web/                        # React 前端，独立构建
-│   │   └── src/
-│   │       ├── app/                # 应用入口、路由、模块注册
-│   │       ├── layouts/            # 工作空间布局
-│   │       ├── pages/              # 页面组装、分享页占位、404
-│   │       ├── features/           # devices / clipboard / transfers / links / system
-│   │       ├── shared/             # API 客户端、环境配置、自绘 UI 原语
-│   │       └── styles/             # Tailwind 和主题变量
-│   └── api/                        # Swift + Vapor，独立构建
-│       ├── Package.swift
-│       ├── Sources/
-│       │   ├── WebdropServer/      # 可执行入口与生命周期
-│       │   └── WebdropAPI/         # 可测试的应用模块
-│       │       ├── Configuration/
-│       │       ├── Features/       # Health + 四个业务模块边界
-│       │       ├── Infrastructure/ # 后续存储、数据库和清理任务
-│       │       └── routes.swift
-│       └── Tests/WebdropAPITests/
-├── packages/contracts/             # OpenAPI 与协议说明、PoW 测试向量
-├── docs/                           # 架构、开发约定和实施阶段
-├── package.json                    # 根目录统一命令
-└── package-lock.json
+```powershell
+npm ci
+pwsh ./scripts/build-api.ps1
 ```
 
-## 本地启动
-
-需要 Node.js 24（建议 `nvm use`）、npm，以及 Swift 6.4+。首次安装需联网。
+默认按本机Linux/macOS及CPU架构选择目标（也可显式传`-Target`）；先构建生产前端，再将页面、JS、CSS、Worker和图标嵌入二进制。例如Linux x86-64输出`dist/api/webdrop-linux-x86_64`及SHA-256清单。复制单个可执行文件即可同时提供页面和API，无需额外复制前端dist或安装Node；运行数据仍保存在可写DATA_DIR。
 
 ```bash
-npm install
+./webdrop-linux-x86_64 serve --hostname 127.0.0.1 --port 8080
 ```
 
-两个终端分别运行：
+首次运行会在当前工作目录生成`.env`并退出。检查并修改配置后，再执行同一启动命令。已有`.env`不会覆盖。
+
+本地访问 http://localhost:8080 。页面/API共用API_PORT，分享链接自动匹配访问地址；生产域名配置HTTPS及反向代理，见后端说明。`/rooms/...`、`/s/...`直接访问支持SPA回退；`/api/*`、`/d/*`和健康检查不回退为页面。
+
+Linux默认裁剪ICU语言数据，保留中英等10种语言；`-FullICU`使用完整数据。首次需安装LLVM工具、clang及ICU的icupkg，见后端说明。
+
+`-ApiOnly`构建纯API版本；`-SkipWebBuild`嵌入已有`apps/web/dist`，用于重复构建其它架构。Linux ARM64和macOS目标参数、验证范围见后端说明。
+
+## 本地开发
 
 ```bash
-# 终端一：Swift 后端，默认 127.0.0.1:8080
+npm ci
 npm run dev:api
+# 另一终端：连接真实后端，默认API为127.0.0.1:8080
+VITE_API_MODE=live npm run dev
 ```
+
+后端首次运行同样先生成.env并退出，检查后重新运行dev:api。开发期继续使用Vite热更新；生产打包不包含mock模块。普通`swift build`不启用前端嵌入。
+
+## 检查
 
 ```bash
-# 终端二：React 前端，默认 localhost:5173
-npm run dev
+npm run check
+npm run lint
+npm run check:swift
+npm run build:web
+npm run test:api
 ```
 
-访问 <http://localhost:5173>。页脚显示真实后端连接状态，未启动后端时显示“后端未连接”，不会使用假数据。
+Swift格式规则与`npm run format:swift`用法见[开发约定](docs/development.md)。
 
-```bash
-curl http://127.0.0.1:8080/api/v1/health
-# {"status":"ok","service":"webdrop-api","apiVersion":"v1"}
-```
+HTTP契约检查见[scripts及后端运行说明](apps/api/README.md)，浏览器测试见[前端测试说明](apps/web/tests/README.md)。
 
-默认配置无需 `.env`。需要修改时，分别复制 `apps/web/.env.example`、`apps/api/.env.example` 为同目录 `.env`；修改后重启服务。
+## 目录与文档
 
-## 构建和检查
+- `apps/web/`：React页面、交互与浏览器测试。
+- `apps/api/Sources/WebdropAPI/Core/`：业务状态、HTTP、持久化、流与配置；`Features/Health/`提供健康探针。
+- `packages/contracts/`：正式OpenAPI与协议，不因当前联调通过而删除。
+- [开发约定](docs/development.md)、[前端说明](apps/web/README.md)、[后端说明](apps/api/README.md)。
+- [前端目标与验收](apps/web/GOAL.md)、[后端目标与验收](apps/api/GOAL.md)。
+- [体积分析](docs/backend-binary-size.md)、[ICU裁剪研究](docs/icu-data-research.md)。
 
-```bash
-npm run build       # 前端生产构建 + 后端 debug 构建
-npm test            # TypeScript 检查 + Oxlint + 后端接口测试
-```
+## 许可证
 
-也可以单独运行 `npm run build:web`、`npm run build:api`、`npm run check`、`npm run lint`、`npm run test:api`。
-
-前端产物在 `apps/web/dist/`。后端发布构建：
-
-```bash
-cd apps/api
-swift build -c release -j 4
-.build/release/webdrop serve --hostname 127.0.0.1 --port 8080
-```
-
-Vapor 不托管前端产物；生产环境用反向代理把 `/api/*`、`/d/*` 转给后端，其余路径交给静态前端及 SPA fallback。`vite preview` 仅用于检查静态产物，生产 API 路由需另行配置。
-
-手机局域网预览可访问 `http://电脑IP:5173`，开发代理仍由电脑上的 Vite 访问后端，无需把后端暴露给局域网。剪贴板 API 在非 localhost 环境需要 HTTPS，具体交互限制见架构文档。
-
-## 下一步开发入口
-
-- [目标导航](GOAL.md)
-- [前端目标](apps/web/GOAL.md)
-- [后端目标](apps/api/GOAL.md)
-- [架构与业务边界](docs/architecture.md)
-- [工程约定](docs/development.md)
-- [分阶段计划](docs/roadmap.md)
-- [接口契约](packages/contracts/README.md)
-- [已实现的业务 API 协议](packages/contracts/protocol.md)
-- [前端说明](apps/web/README.md)
-- [后端说明](apps/api/README.md)
+项目使用[MIT许可证](LICENSE)。第三方依赖保留各自许可证。

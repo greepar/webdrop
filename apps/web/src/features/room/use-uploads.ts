@@ -98,7 +98,7 @@ export function useUploads(roomId: string, onComplete: (item: RoomItem) => void)
       if (isApiError(error) && [404, 410].includes(error.status)) {
         patch(localId, { uploadId: null, uploadUrl: null, createKey: newIdempotencyKey(), completeKey: newIdempotencyKey() })
       }
-      patch(localId, { status: 'failed', cancelPending: false, progress: null, error: isApiError(error) && error.code === 'UPLOAD_TIMEOUT' ? '上传超时，请重试' : '上传未完成，请重试。房间若已关闭，请返回首页' })
+      patch(localId, { status: 'failed', cancelPending: false, progress: null, error: describeUploadError(error) })
     }
   }, [commit, onComplete, patch, roomId])
 
@@ -157,4 +157,22 @@ export function useUploads(roomId: string, onComplete: (item: RoomItem) => void)
   }, [commit])
 
   return { entries, start, cancel, retry, dismiss, abortAll }
+}
+
+// Surface the real failure reason instead of blaming a closed room for everything.
+function describeUploadError(error: unknown): string {
+  if (isApiError(error)) {
+    if (error.code === 'UPLOAD_TIMEOUT') return '上传超时，请重试'
+    if (error.code === 'FILE_TOO_LARGE') return '文件超过大小上限'
+    if (error.code === 'QUOTA_EXCEEDED') return '房间存储已满，请联系房主清理'
+    if (error.code === 'ROOM_CAPACITY' || error.code === 'CAPACITY') {
+      return error.retryAfter ? `服务繁忙，${error.retryAfter} 秒后重试` : '服务繁忙，请稍后重试'
+    }
+    if (error.code === 'ROOM_FULL') return '房间人数已满'
+    if (error.code === 'INVALID_INPUT') return '文件信息无效，请换个文件重试'
+    if (error.status === 429) return error.retryAfter ? `操作太频繁，${error.retryAfter} 秒后再试` : '操作太频繁，请稍后再试'
+    if ([401, 403, 404].includes(error.status)) return '房间不可用，请返回首页重新进入'
+    if (error.status === 0 || error.status >= 500) return '网络不稳定，点重试继续上传'
+  }
+  return '上传未完成，请点重试'
 }

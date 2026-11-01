@@ -41,3 +41,30 @@ export async function readClipboardText(): Promise<string | null> {
     return null
   }
 }
+
+// Reads files (screenshots, images, videos, any file) from the clipboard. Returns an empty array
+// when the clipboard has no files or the API is unavailable/denied. Call from a user gesture.
+export async function readClipboardFiles(): Promise<File[]> {
+  try {
+    const items = await navigator.clipboard?.read?.()
+    if (!items) return []
+    const files: File[] = []
+    for (const item of items) {
+      for (const type of item.types) {
+        try {
+          const blob = await item.getType(type)
+          // Skip the HTML wrapper browsers add alongside a copied file; keep the real payloads.
+          if (blob.size === 0) continue
+          const subtype = type.split('/')[1]?.split(';')[0]?.split('+')[0]
+          const ext = subtype ? `.${subtype}` : ''
+          files.push(new File([blob], `clipboard-${Date.now()}${ext}`, { type: blob.type || type }))
+        } catch {
+          // One unreadable type must not block the others.
+        }
+      }
+    }
+    return files
+  } catch {
+    return []
+  }
+}

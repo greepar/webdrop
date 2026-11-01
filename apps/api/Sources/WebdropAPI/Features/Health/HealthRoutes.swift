@@ -13,7 +13,7 @@ struct HealthResponse: Content {
 }
 
 struct HealthRoutes: RouteCollection {
-    func boot(routes: RoutesBuilder) throws {
+    func boot(routes: any RoutesBuilder) throws {
         routes.get("health") { _ in HealthResponse() }
     }
 }

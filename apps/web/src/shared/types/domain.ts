@@ -1,4 +1,4 @@
-// Mirrors packages/contracts/openapi.yaml (v0.3.0). Field names and enums follow the schema exactly.
+// Mirrors packages/contracts/openapi.yaml (v0.6.0). Field names and enums follow the schema exactly.
 // Opaque IDs are strings. Room codes keep leading zeros. Nonces are decimal strings, never numbers.
 
 export type MemberRole = 'owner' | 'member'
@@ -7,11 +7,24 @@ export type Capabilities = {
   roomCodeLength: number
   allowedRoomCodeLengths: number[]
   maxDevices: number
+  maxRooms: number
+  maxOwnedRooms: number
   maxFileBytes: number
   roomQuotaBytes: number
   roomIdleSeconds: number
   linkDefaultSeconds: number
   heartbeatSeconds: number
+}
+
+export type RoomCapacity = {
+  maxRooms: number
+  activeRooms: number
+  availableRooms: number
+  maxOwnedRooms: number
+  roomCodeLength: number
+  codeCapacity: number
+  occupiedCodes: number
+  availableCodes: number
 }
 
 export type Member = {
@@ -39,7 +52,7 @@ export type RoomSnapshot = Room & { eventCursor: string }
 
 export type Membership = { room: Room; membership: Member }
 
-export type JoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired'
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'withdrawn'
 
 export type JoinRequest = {
   id: string
@@ -111,7 +124,7 @@ export type Proof = { challengeId: string; nonce: string }
 
 export type RoomEvent = {
   eventId: string
-  type: 'member.joined' | 'member.left' | 'member.updated' | 'item.created' | 'item.deleted' | 'upload.updated' | 'room.updated' | 'room.closed'
+  type: 'member.joined' | 'member.left' | 'member.updated' | 'item.created' | 'item.deleted' | 'upload.updated' | 'room.updated' | 'room.closed' | 'join-request.created' | 'join-request.updated'
   roomId: string
   occurredAt: string
   data: unknown

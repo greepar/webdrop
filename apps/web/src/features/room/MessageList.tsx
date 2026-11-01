@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { formatTime } from '@/features/room/format'
 import { Button, IconButton } from '@/shared/ui/primitives'
+import { CopyButton } from '@/shared/ui/CopyButton'
 import { Icon } from '@/shared/ui/Icon'
 import { isAssetItem, type AssetItem, type Member, type RoomItem } from '@/shared/types/domain'
 import { AssetCard } from '@/features/room/AssetCard'
@@ -17,14 +18,16 @@ type Props = {
   loadingOlder: boolean
   onLoadOlder: () => void
   onDelete: (item: RoomItem) => void
-  onCopy: (text: string) => void
-  onShare: (item: AssetItem) => void
+  onCopy: (text: string) => Promise<boolean>
+  onCopyImage: (item: AssetItem) => Promise<boolean>
+  onCopyLink: (item: AssetItem) => Promise<boolean>
+  onDownload: (item: AssetItem) => void
   onPreview: (item: AssetItem) => void
 }
 
 // Follows new messages only while the reader is near the bottom; otherwise keeps the scroll position
 // and shows a "new messages" pill instead of jumping.
-export function MessageList({ items, members, selfMemberId, isOwner, freshIds = [], hasOlder, loadingOlder, onLoadOlder, onDelete, onCopy, onShare, onPreview }: Props) {
+export function MessageList({ items, members, selfMemberId, isOwner, freshIds = [], hasOlder, loadingOlder, onLoadOlder, onDelete, onCopy, onCopyImage, onCopyLink, onDownload, onPreview }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
   const previousItems = useRef<RoomItem[]>([])
@@ -36,9 +39,43 @@ export function MessageList({ items, members, selfMemberId, isOwner, freshIds = 
   const scrollToBottom = (behavior: ScrollBehavior) => {
     const el = scrollRef.current
     if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : behavior })
+    // Programmatic scrolls don't always fire enough scroll events (smooth), so mark
+    // the intent immediately; the onScroll handler will confirm it afterwards.
+    nearBottomRef.current = true
     setUnseen(0)
+    if (behavior === 'auto' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      el.scrollTop = el.scrollHeight - el.clientHeight
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior })
+    }
   }
+
+  // Stick to the bottom while the user is near it: images, fonts and late layout
+  // grow scrollHeight after the items effect already ran. Re-pin on any size change
+  // instead of leaving the last message half-cut (needs one more wheel swipe).
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let raf = 0
+    const pin = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        if (nearBottomRef.current && !anchorRef.current && el.isConnected) {
+          el.scrollTop = el.scrollHeight - el.clientHeight
+        }
+      })
+    }
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(pin) : null
+    ro?.observe(el)
+    const list = el.querySelector('ol')
+    if (list) ro?.observe(list)
+    // First paint: fonts/images may still be pending; one extra pin settles it.
+    pin()
+    return () => {
+      cancelAnimationFrame(raf)
+      ro?.disconnect()
+    }
+  }, [])
 
   useLayoutEffect(() => {
     const previous = previousItems.current
@@ -138,7 +175,7 @@ export function MessageList({ items, members, selfMemberId, isOwner, freshIds = 
             const sender = memberName.get(item.senderMemberId) ?? '成员'
             return (
               <li key={item.id} data-item-id={item.id} className={`flex w-full ${freshIds.includes(item.id) ? 'anim-message' : ''} ${mine ? 'justify-end' : 'justify-start'}`}>
-                <article className={`group flex max-w-[min(34rem,88%)] flex-col gap-1.5 ${mine ? 'items-end' : 'items-start'}`}>
+                <article className={`message-bubble group flex max-w-[min(34rem,88%)] flex-col gap-1.5 ${mine ? 'items-end' : 'items-start'}`}>
                   <header className="flex items-center gap-2 px-1 text-xs text-muted">
                     <span className="font-medium text-ink">{mine ? '我' : sender}</span>
                     <time dateTime={item.createdAt}>{formatTime(item.createdAt)}</time>
@@ -152,16 +189,21 @@ export function MessageList({ items, members, selfMemberId, isOwner, freshIds = 
                       asset={item.asset}
                       mine={mine}
                       onPreview={() => onPreview(item)}
-                      onShare={mine || isOwner ? () => onShare(item) : undefined}
+                      onDownload={() => onDownload(item)}
+                      onCopyLink={mine || isOwner ? () => onCopyLink(item) : undefined}
+                      onCopyImage={item.asset.contentType.startsWith('image/') ? () => onCopyImage(item) : undefined}
+                      onDelete={mine || isOwner ? () => onDelete(item) : undefined}
                     />
                   ) : null}
-                  <div className="flex items-center gap-1 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                  <div className="message-actions-clip message-actions-clip--inline">
+                  <div className="message-copy-actions flex items-center gap-1">
                     {item.kind === 'text' && item.text !== null && (
-                      <IconButton icon="copy" label="复制文字" size="sm" onClick={() => onCopy(item.text ?? '')} />
+                      <CopyButton label="复制文字" size="sm" onCopy={() => onCopy(item.text ?? '')} />
                     )}
-                    {(mine || isOwner) && (
+                    {item.kind === 'text' && (mine || isOwner) && (
                       <IconButton icon="trash" label="删除这条内容" size="sm" tone="danger" onClick={() => onDelete(item)} />
                     )}
+                  </div>
                   </div>
                 </article>
               </li>

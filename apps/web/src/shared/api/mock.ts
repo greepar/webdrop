@@ -32,6 +32,8 @@ const CAPABILITIES = {
   roomCodeLength: 4,
   allowedRoomCodeLengths: [4],
   maxDevices: 10,
+  maxRooms: 500,
+  maxOwnedRooms: 5,
   maxFileBytes: 100_000_000,
   roomQuotaBytes: 500_000_000,
   roomIdleSeconds: 1800,
@@ -74,7 +76,7 @@ function myMember(room: MockRoom) {
 function requireMember(roomId: string) {
   const room = state.rooms.get(roomId)
   const membership = room ? myMember(room) : null
-  if (!room || !membership) fail(404, 'ROOM_UNAVAILABLE', '房间不存在或不可加入')
+  if (!room || !membership) fail(404, 'NOT_FOUND', '房间不存在或不可加入')
   return { room, membership }
 }
 
@@ -160,6 +162,19 @@ async function route(path: string, method: string, body: unknown, options: Reque
 
   if (method === 'GET' && p === '/capabilities') return ok(CAPABILITIES)
 
+  if (method === 'GET' && p === '/room-capacity') {
+    return ok({
+      maxRooms: CAPABILITIES.maxRooms,
+      activeRooms: state.rooms.size,
+      availableRooms: Math.max(0, CAPABILITIES.maxRooms - state.rooms.size),
+      maxOwnedRooms: CAPABILITIES.maxOwnedRooms,
+      roomCodeLength: CAPABILITIES.roomCodeLength,
+      codeCapacity: 10_000,
+      occupiedCodes: state.byCode.size,
+      availableCodes: Math.max(0, 10_000 - state.byCode.size),
+    })
+  }
+
   if (method === 'POST' && p === '/sessions') {
     const existed = state.sessionCreated
     state.sessionCreated = true
@@ -169,6 +184,24 @@ async function route(path: string, method: string, body: unknown, options: Reque
 
   if (method === 'GET' && p === '/session') {
     if (!state.sessionCreated) fail(401, 'SESSION_REQUIRED', '会话不存在')
+    return ok({ deviceId: state.deviceId, displayName: state.displayName, csrfToken: state.csrfToken, memberships: membershipsForSession() })
+  }
+
+  // Rename stub until the backend PATCH /session exists: validates like the server (non-empty,
+  // max 80 UTF-8 bytes) so UI behaviour matches once the real endpoint lands.
+  if (method === 'PATCH' && p === '/session') {
+    if (!state.sessionCreated) fail(401, 'SESSION_REQUIRED', '会话不存在')
+    const name = typeof b.displayName === 'string' ? b.displayName.trim() : ''
+    if (!name || new TextEncoder().encode(name).length > 80) fail(400, 'INVALID_INPUT', '设备名需为 1–80 字节')
+    state.displayName = name
+    for (const room of state.rooms.values()) {
+      for (const member of room.members) {
+        if (member.deviceId === state.deviceId) member.displayName = name
+      }
+      for (const request of room.joinRequests) {
+        if (request.deviceId === state.deviceId && request.status === 'pending') request.displayName = name
+      }
+    }
     return ok({ deviceId: state.deviceId, displayName: state.displayName, csrfToken: state.csrfToken, memberships: membershipsForSession() })
   }
 
@@ -332,14 +365,14 @@ async function route(path: string, method: string, body: unknown, options: Reque
         room.members = room.members.filter((m) => m.id !== membership.id)
         return { status: 204, body: undefined }
       }
-      if (!isOwner) fail(403, 'FORBIDDEN', '只有房主可以移出成员')
+      if (!isOwner) fail(403, 'OWNER_REQUIRED', '只有房主可以移出成员')
       if (memberMatch[1] === membership.id) fail(409, 'CONFLICT', '不能移出自己')
       room.members = room.members.filter((m) => m.id !== memberMatch[1])
       return { status: 204, body: undefined }
     }
 
     if (method === 'DELETE' && rest === '') {
-      if (!isOwner) fail(403, 'FORBIDDEN', '只有房主可以关闭房间')
+      if (!isOwner) fail(403, 'OWNER_REQUIRED', '只有房主可以关闭房间')
       for (const link of room.links) link.revokedAt = link.revokedAt ?? now()
       state.byCode.delete(room.code)
       state.rooms.delete(room.id)

@@ -35,7 +35,7 @@ export async function request(path: string, options: RequestOptions = {}): Promi
 
   const response = await fetch(`${env.apiBaseUrl}${path}`, {
     method,
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
@@ -63,7 +63,7 @@ export async function uploadBytes(
   signal.throwIfAborted()
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', url.startsWith('http') ? url : `${window.location.origin}${url}`)
+    xhr.open('PUT', new URL(url, new URL(env.apiBaseUrl, window.location.origin)).href)
     xhr.withCredentials = true
     xhr.timeout = 120_000
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')

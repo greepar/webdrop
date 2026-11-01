@@ -31,8 +31,9 @@ export function formatRemaining(iso: string, now: number) {
   return `${Math.max(minutes, 1)} 分钟后到期`
 }
 
-export function assetKind(contentType: string): 'image' | 'video' | 'file' {
+export function assetKind(contentType: string): 'image' | 'video' | 'audio' | 'file' {
   if (contentType.startsWith('image/')) return 'image'
   if (contentType.startsWith('video/')) return 'video'
+  if (contentType.startsWith('audio/')) return 'audio'
   return 'file'
 }

@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:webdrop}/apps/api",
+            "name": "Debug webdrop (apps/api)",
+            "target": "webdrop",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug webdrop (apps/api)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:webdrop}/apps/api",
+            "name": "Release webdrop (apps/api)",
+            "target": "webdrop",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release webdrop (apps/api)"
+        }
+    ]
+}

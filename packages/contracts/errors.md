@@ -1,13 +1,13 @@
 # API 错误与客户端恢复
 
-对应 OpenAPI 0.5.0。逐接口状态码与允许的 code 以 OpenAPI responses 为准；下表汇总相同分支。message 仅用于展示，不作为程序分支。requestId 与响应头 X-Request-ID 用于定位问题。
+对应 OpenAPI 0.6.1。逐接口状态码与允许的 code 以 OpenAPI responses 为准；下表汇总相同分支。message 仅用于展示，不作为程序分支。requestId 与响应头 X-Request-ID 用于定位问题。
 
 | code | 客户端处理 |
 | --- | --- |
 | INVALID_INPUT / INVALID_JSON / INVALID_CODE / JSON_REQUIRED / HTTP_413 | 修正字段、编码、Content-Type 或请求体大小；不原样自动重试 |
 | SESSION_REQUIRED | 建立或恢复会话，重新获取成员关系；新匿名会话不能恢复原 owner 权限 |
 | CSRF_INVALID | GET session 读取当前 token，再重试；仍失败时停止 |
-| ORIGIN_FORBIDDEN / FORBIDDEN / OWNER_REQUIRED | 停止操作，检查部署 origin 或当前权限 |
+| ORIGIN_FORBIDDEN / FORBIDDEN / OWNER_REQUIRED | 停止操作，检查请求Origin与Host/协议、可选CORS_ALLOWED_ORIGINS或当前权限 |
 | IDEMPOTENCY_REQUIRED | 提供8–128位可见 ASCII 键 |
 | IDEMPOTENCY_CONFLICT | 同键对应不同参数；确认是新操作后使用新键，不能盲目重试 |
 | POW_INVALID | 重新申请挑战并求解；成功幂等重试保留原键及参数 |
@@ -70,3 +70,10 @@ SSE 建连前使用下列 HTTP 错误；200之后会话过期或成员撤权直�
 | `POST /api/v1/rooms/{roomId}/join-requests/{requestId}/reject` | 400: INVALID_INPUT, INVALID_JSON; 401: SESSION_REQUIRED; 403: CSRF_INVALID, ORIGIN_FORBIDDEN, OWNER_REQUIRED; 404: NOT_FOUND; 413: HTTP_413; 415: JSON_REQUIRED; 429: RATE_LIMITED; 500: INTERNAL_ERROR; 409: JOIN_REQUEST_STATE, ROOM_FULL |
 
 生命周期兼容0.5.0：离房/关房重复请求可返回404；已有成功缓存只在当前会话与成员权限仍有效时使用。不存在可恢复的成员关系时不通过缓存复活。POST rooms/join 的全新请求继续使用ROOM_UNAVAILABLE；被撤权的成功重试使用NOT_FOUND。
+
+GET /api/v1/room-capacity沿用公共能力接口的400 INVALID_INPUT/INVALID_JSON、413 HTTP_413、415 JSON_REQUIRED、429 RATE_LIMITED及500 INTERNAL_ERROR。创建房间的ROOM_CAPACITY沿用既有状态与重试语义，可能由全局MAX_ROOMS或当前会话MAX_OWNED_ROOMS触发；公共availableRooms不包含当前会话配额或限流。
+
+| 接口补充 | 错误 |
+| --- | --- |
+| DELETE /api/v1/rooms/{roomId}/join-requests/{requestId} | 403 CSRF_INVALID/ORIGIN_FORBIDDEN/FORBIDDEN；404 NOT_FOUND；409 JOIN_REQUEST_STATE |
+| PATCH /api/v1/session | 400 INVALID_INPUT/INVALID_JSON；401 SESSION_REQUIRED；403 CSRF_INVALID/ORIGIN_FORBIDDEN |

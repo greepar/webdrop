@@ -6,9 +6,9 @@ import type { JoinRequest } from '@/shared/types/domain'
 
 const POLL_MS = 3_000
 
-// Owner-only queue. Polling is the contract's first-version mechanism: every 3s while visible, paused
-// in the background, and it honours Retry-After on 429. There is no SSE event for applications.
-export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (count: number) => void }) {
+// Owner-only queue. SSE (join-request.created/updated) is the fast path via joinRequestTick;
+// the 3s poll below is the fallback for missed events and for backends that don't emit them yet.
+export function JoinRequests({ roomId, joinRequestTick = 0, onCount }: { roomId: string; joinRequestTick?: number; onCount?: (count: number) => void }) {
   // null means "not loaded yet"; no separate loading state to keep in sync.
   const [requests, setRequests] = useState<JoinRequest[] | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -26,6 +26,8 @@ export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (c
 
   // The first load and every poll go through the same async path; state is only written after an
   // awaited response, so no synchronous render happens inside the effect.
+  // joinRequestTick: every SSE arrival re-reads the list immediately (the dialog may be open
+  // while the applicant withdraws, so the count must follow without waiting for the next poll).
   useEffect(() => {
     const controller = new AbortController()
     let cancelled = false
@@ -54,7 +56,8 @@ export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (c
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [roomId, apply])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, apply, joinRequestTick])
 
   const refresh = useCallback(async () => {
     try {

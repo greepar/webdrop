@@ -1,7 +1,8 @@
 import { ThemeToggle } from '@/features/theme/ThemeToggle'
 import { RoomCodeInput } from '@/features/entry/RoomCodeInput'
-import { CreateRoomPanel, PasswordPrompt, PendingJoin } from '@/features/entry/JoinFlows'
+import { PasswordPrompt, PendingJoin, DeviceIdentity, RecoveredRooms, RoomCapacityLine } from '@/features/entry/JoinFlows'
 import { describePow, useEntry } from '@/features/entry/use-entry'
+import { useRoomCapacity } from '@/features/entry/use-room-capacity'
 import { DevMockBadge, Spinner, StatusLine, Button } from '@/shared/ui/primitives'
 import { BrandMark } from '@/shared/ui/Icon'
 import { env } from '@/shared/config/env'
@@ -10,8 +11,15 @@ export function EntryPage() {
   const entry = useEntry()
   const powText = describePow(entry.powStatus)
   const inlineError = entry.notice?.tone === 'error' ? entry.notice.text : null
-  const inlineHint = entry.notice?.tone === 'info' ? entry.notice.text : null
+  // No-room hint is intentional: when the code is not taken, joining fails quietly and the UI only
+  // offers the create button. RoomCodeInput already reserves the hint/error slot height.
+  const inlineHint = entry.canCreate ? null : entry.notice?.tone === 'info' ? entry.notice.text : null
   const cooling = entry.powStatus.phase === 'cooldown'
+  const recoverable = entry.recoverable
+  const ownedCount = recoverable.filter((room) => room.role === 'owner').length
+  const capacity = useRoomCapacity()
+  const sessionStale = entry.sessionStale
+  const sessionError = entry.sessionStale ? null : entry.sessionError
 
   return (
     <div className="flex min-h-dvh flex-col px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] sm:px-8">
@@ -30,6 +38,8 @@ export function EntryPage() {
           <PendingJoin
             code={entry.code}
             expiresAt={entry.pending.request.expiresAt}
+            cancelling={entry.cancelling}
+            error={entry.cancelError}
             onCancel={entry.cancelPending}
           />
         ) : (
@@ -45,7 +55,7 @@ export function EntryPage() {
             hint={inlineHint}
             canCreate={entry.canCreate}
             onChange={entry.setCode}
-            onCreate={entry.openCreate}
+            onCreate={entry.createRoom}
             onRandom={entry.randomRoom}
           />
           {entry.passwordRequired && (
@@ -56,17 +66,17 @@ export function EntryPage() {
               onCancel={() => entry.setCode(entry.code)}
             />
           )}
-          {entry.createOpen && (
-            <CreateRoomPanel
-              disabled={entry.busyNow}
-              password={entry.createPassword}
-              approvalRequired={entry.createWithApproval}
-              onPassword={entry.setCreatePassword}
-              onApproval={entry.setCreateWithApproval}
-              onCreate={entry.createRoom}
-              onCancel={entry.cancelCreate}
+          {recoverable.length > 0 && (
+            <RecoveredRooms
+              rooms={recoverable}
+              stale={sessionStale}
+              staleMessage={entry.sessionError}
+              onRetry={entry.retrySession}
+              onOpen={(roomId) => entry.openRecovered(roomId)}
             />
           )}
+          <RoomCapacityLine capacity={capacity} owned={ownedCount} />
+          <DeviceIdentity name={entry.deviceName} onRename={entry.renameDevice} />
           <div className="mt-6 min-h-10">
             {entry.busyNow && (
               <div className="flex items-center justify-center gap-3 text-sm text-muted">
@@ -81,9 +91,9 @@ export function EntryPage() {
             {!entry.busyNow && entry.powStatus.phase === 'failed' && (
               <StatusLine tone="error">{powText}</StatusLine>
             )}
-            {entry.sessionError && (
+            {sessionError && (
               <div className="flex items-center gap-3 text-sm">
-                <StatusLine tone="error">{entry.sessionError}</StatusLine>
+                <StatusLine tone="error">{sessionError}</StatusLine>
                 <Button variant="ghost" onClick={entry.retrySession} className="min-h-11 px-3 text-xs">重新连接</Button>
               </div>
             )}

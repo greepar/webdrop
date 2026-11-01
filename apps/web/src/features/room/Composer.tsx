@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react'
+import { VoiceRecorder } from './VoiceRecorder'
 import { formatBytes } from './format'
-import { readClipboardText } from '@/shared/clipboard'
+import { readClipboardFiles, readClipboardText } from '@/shared/clipboard'
 import { Button, IconButton, StatusLine } from '@/shared/ui/primitives'
 
 type Props = {
@@ -46,12 +47,22 @@ export function Composer({ disabled, onSend, onPickFiles, maxFileBytes }: Props)
     pastePending.current = true
     setPasting(true)
     setPasteNotice(null)
+    // Files first: screenshots / copied images land as files, not text. Allowed types still go
+    // through the room's normal upload path (size + permission checks in onPickFiles).
+    const files = await readClipboardFiles()
+    if (files.length > 0) {
+      pastePending.current = false
+      if (!mounted.current) return
+      setPasting(false)
+      onPickFiles(files)
+      return
+    }
     const value = await readClipboardText()
     pastePending.current = false
     if (!mounted.current) return
     setPasting(false)
     if (value === null) { setPasteNotice('无法读取剪贴板，请在输入框中手动粘贴'); return }
-    if (!value) { setPasteNotice('剪贴板里没有文字'); return }
+    if (!value) { setPasteNotice('剪贴板里没有内容'); return }
     setText(current => current === initial ? current.slice(0, start) + value + current.slice(end) : current + value)
     const unchanged = areaRef.current?.value === initial
     areaRef.current?.focus()
@@ -73,14 +84,15 @@ export function Composer({ disabled, onSend, onPickFiles, maxFileBytes }: Props)
   }
 
   return (
-    <form onSubmit={onSubmit} className="border-t border-line bg-canvas/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-8">
+    <form onSubmit={onSubmit} className="relative border-t border-line bg-canvas/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:px-8">
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs text-muted">{maxFileBytes !== undefined ? `单个文件不超过 ${formatBytes(maxFileBytes)}` : ''}</p>
-        <Button variant="ghost" onClick={paste} disabled={disabled || pasting} className="min-h-11 shrink-0 px-3 text-xs">{pasting ? '正在读取…' : '粘贴文字'}</Button>
+        <Button variant="ghost" onClick={paste} disabled={disabled || pasting} className="min-h-11 shrink-0 px-3 text-xs">{pasting ? '正在读取…' : '粘贴'}</Button>
       </div>
       {pasteNotice && <div className="mb-2"><StatusLine tone="error">{pasteNotice}</StatusLine></div>}
       <div className="flex items-end gap-2">
         <IconButton icon="paperclip" label="选择文件" onClick={() => fileRef.current?.click()} disabled={disabled} className="size-11" />
+        <VoiceRecorder disabled={disabled} onSend={onPickFiles} />
         <input
           ref={fileRef}
           type="file"

@@ -617,3 +617,47 @@ iOS 实机当前未验证；桌面手机视口模拟不能替代此项。无法�
 - live-smoke 扩展：接收端开始并暂停 PUT，房主移出成员，确认对方失去房间 UI 且 Chrome Network.loadingFailed 标记该上传 canceled，通过。
 - 同轮独立会话聊天/文件、私有下载、匿名分享及撤销回归通过。类型检查、lint（无警告）、最新生产构建通过。
 - 检查覆盖被踢时在途 PUT；创建上传响应尚未返回等其它阶段的权限失效仍待更广覆盖。
+
+### 房间生命周期：返回、恢复、离房关房（room-lifecycle.md）
+
+- 按角色区分左上返回：普通成员弹窗提供“回首页保留房间 / 离开房间 / 取消”，房主提供“回首页保留房间 / 关闭房间并返回 / 取消”；关闭明确说明影响所有成员与分享链接；仅 204 后导航。
+- 首页恢复入口来自 `GET /session` 的 memberships，显示房间号/角色/锁定/密码/审批状态；进入仍重新验证快照与成员关系。会话错误时保留上次可用列表并标注可刷新；网络失败不清除有效入口；401 清空。
+- 跨标签页通过 BroadcastChannel + storage 事件触发服务端重读，不合并缓存；房间页聚焦/可见/联网时重读快照与会话收敛；页面离开卸载 SSE/轮询/上传，不发离房或关房请求；不在 beforeunload 发送请求。
+- 超时/5xx 不直接判成功或失败：重新读取 memberships 与快照后再决定；`room.closed` 立即清理，普通断线只重连；会话失效后不凭房间号恢复房主权限。
+- 开发 mock 对齐契约：成员关房/移出他人返回 `OWNER_REQUIRED`，成员快照/信道 404 返回 `NOT_FOUND`。
+- 入房规则开关保持上一轮行为：悲观更新、原位 spinner、说明区预留高度、弹窗内部滚动；锁定保留密码与审批配置。
+- 新增 `lifecycle-smoke.mjs`：双会话恢复、成员保留/离开、房主保留/关闭全流程通过；回归 `management-smoke`、`entry-conflict`、`live-smoke`、`dialog-single`、`dialog-keyboard`、`session-recovery` 通过；`check`、`lint`、`build:web` 通过。
+- 动效：返回弹窗与规则开关沿用既有 token，仅 transform/opacity，200ms 强 ease-out，`prefers-reduced-motion` 去位移；快速连点由 ref 锁拦截。未做新的性能录制与 iOS 实机。
+
+### 成员卡片与规则文案稳定（本轮）
+
+- 项目没有 r2 圆角 token：只有 `sketch` 手绘圆角与 `sketch-pill` 胶囊。成员列表沿用 `sketch`，未引入 `rounded-2xl`。
+- 成员改为独立卡片：`ul` 去掉 `divide-y`，每项 `sketch border bg-raised` 柔和边框 + 紧凑间距，保留设备名/身份/在线/“我”与移出权限；亮暗主题与手机复用既有 token。
+- 规则说明改为稳定文案，不再随开关重写；删除全部 `min-h-*` 占位。保存中/失败走每行独立状态槽（spinner + 文字 / 错误），不改变说明布局；同一规则提交期间防重复，失败保留旧开关并就地提示。
+- 开关只过渡 `transform/background-color/border-color/opacity`，密码展开只过渡 `grid-template-rows`，收起后不留白；超高内容走弹窗内部滚动。`prefers-reduced-motion` 去位移。
+- 图片消息新增复制按钮：读取私有内容字节写剪贴板，失败时复制下载链接兜底。
+- 新增 `rules-members-smoke.mjs`：亮暗 × 手机/桌面四组验证卡片、无横向溢出、文案切换前后一致、保存中顶部不动、快速连点单次生效、密码收起无空白，全部通过；回归 `lifecycle/management/dialog/live` 通过；`check`、`lint`、`build:web` 通过。
+
+### 文件列表弹窗（本轮）
+
+- 契约边界：无附件独立接口。列表 = 已加载 `items` 中的 asset 项 + `uploads` 在途队列，按稳定 ID 去重；筛选/搜索只作用于已加载范围，标题与提示明确标注“已加载 N 项”。未为搜索无界拉取历史。
+- 入口：顶栏成员旁新增“文件”按钮（桌面文字按钮 + 手机图标按钮），与成员/管理排列一致。
+- 弹窗：复用 `Dialog`（标题固定、内部滚动、Escape/焦点管理），筛选 chips + 搜索框固定在顶部，列表区域独立滚动；切换筛选、搜索、预览返回均保留实例与滚动位移，不卸载重建。
+- 卡片：图片缩略图（私有 content 懒加载）或类型图标，文件名/大小/发送者/时间/状态；下载走私有直链，复制链接复用分享契约按需创建，删除二次确认并说明同步删除聊天附件，以服务端结果为准。
+- 数据一致：删除/上传完成/资源失效走同一 `room.items` + `uploads` 状态；权限变化与房间关闭沿用现有 gone/error 分支。
+- 验证：`file-list-smoke.mjs` 亮暗 × 手机/桌面四组通过（长文件名截断无溢出、筛选/搜索/分页/删除确认/预览返回）；回归 `lifecycle/management/dialog/live` 通过；`check`、`lint`、`build:web` 通过。
+- 动效：筛选/搜索/展开均为 opacity + grid-template-rows，200ms 强 ease-out；`prefers-reduced-motion` 去位移。弹窗抖动检查：切换筛选与搜索时标题不动，超高内容走内部滚动。
+- 未覆盖：音频/视频真实解码播放、iOS 实机。
+
+### 复制按钮原位反馈（本轮）
+
+- 聊天复制成功不再走顶部 notice：`CopyButton` 在原位 crossfade 复制图标 → 打勾（opacity 150ms），2 秒后翻回；按钮尺寸不变，内容区不跳动。
+- 失败仍走顶部错误提示；按钮忙时防重复点击。`check`、`lint`、`copy-button-smoke` 通过。
+
+## 撤回提醒与局域网预览修复
+
+- [x] RoomActions移除管理面板pendingCount覆盖SSE watchedCount的双状态优先级，面板与事件重读写入同一个计数；已打开过面板后撤回不会残留红点/提醒。approval-sse专项增加打开/关闭面板再撤回场景，红点及提醒均消失，未依赖30秒轮询。
+- [x] 本地5174代理实际连接的18080仍为15:51旧后端（旧Origin白名单及无申请SSE）；保留/tmp/webdrop-data重启为当前构建。局域网192.168.1.201:5174 POST sessions实际201，外站Origin仍403；无需放开来源检查。
+- [x] 前端类型检查通过；lint无错误，现有DeviceNameEditor的set-state-in-effect警告未在本轮处理。隔离真实SSE浏览器回归通过。
+
+- [x] 首页底部DeviceIdentity移除写死的“本机”，直接显示GET session的displayName，长名截断并保留title。类型检查及真实浏览器设备名展示/改名立即更新/刷新保留专项通过（device-identity.mjs）。

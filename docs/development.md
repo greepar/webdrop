@@ -1,115 +1,44 @@
-# 工程约定
+# 开发约定
 
-## 已确认目标
+前端React/TypeScript/Vite，后端Swift6.4/Vapor。运行和打包入口见根README；当前业务行为以packages/contracts中的正式OpenAPI与协议为准。
 
-前端目标以 [apps/web/GOAL.md](../apps/web/GOAL.md) 为准，后端目标以 [apps/api/GOAL.md](../apps/api/GOAL.md) 为准；双方仅通过 [API 契约](../packages/contracts/README.md) 对齐。DropRoom 和原生 Swift PoW 后端已实现；极简首页与前端 PoW 组件仍待前端独立实现。
+## 协作与代码边界
 
-## 仓库与依赖
+- 前端依赖方向为app/pages/layouts → features → shared；页面不散落fetch，API响应作为unknown在边界验证。
+- 前后端分别维护apps/web/GOAL.md和apps/api/GOAL.md的有效要求及验收记录；跨端行为变更先明确契约并同步两端，mock不能成为另一套标准。
+- 后端共享状态由actor/事务保护；请求授权、状态变更、人数/配额检查和幂等必须原子执行。只向客户端返回契约允许的数据。
+- 错误统一为error.code/message/requestId；Range416、HEAD、SSE已开始后的撤权按协议处理。
+- 角色来自服务端会话；房间号、密码、浏览器缓存和旧成功响应不能代替当前权限。导航不自动离房/关房，不自动转让owner。
 
-前后端保持独立工具链。根 `package.json` 只提供统一命令和前端 workspace，不包装 Swift 依赖。
+## 工具链与构建
 
-提交根 `package-lock.json` 和 `apps/api/Package.resolved`。已安装的环境使用 `npm ci` 重建前端依赖。构建目录、临时文件和 `.env` 不提交；新增环境变量同步更新各自 `.env.example`。
+- 提交package-lock.json和apps/api/Package.resolved；构建使用锁定版本。
+- 不提交node_modules、.build、dist、运行.data、.env或自动生成的嵌入资源Swift文件。
+- 发布使用pwsh scripts/build-api.ps1，默认构建并嵌入前端；纯API构建用-ApiOnly。生成资源只在WEBDROP_EMBED_WEB编译条件下启用。
+- 浏览器可见VITE_*变量不存放秘密；前后端按同源部署，生产配置确切HTTPS origin。
+- Linux发布默认使用ICU语言子集；`-FullICU`保留完整SDK数据。保留语言、已知回退及工具依赖见后端说明，升级SDK时重新验证子集。macOS继续使用系统库。
 
-Node 使用 `.nvmrc` 的 24 版本，Swift 最低 6.4。前端采用 Vite 官方 React TypeScript 模板，并启用 strict 与路径别名；lint 使用模板配套的 Oxlint。
+## Swift代码风格
 
-## 前端
+手写Swift统一4空格缩进、120列目标宽度；每行一条语句/一个属性，方法和类型之间留空行，import排序。局部变量和工具函数使用有含义的lowerCamelCase名称；边界输入用guard/可选绑定，长路由按职责拆分。Codable属性名属于持久化格式，整理代码时不得随意改名。
 
-依赖方向是 `app/pages/layouts → features → shared`。模块的 `index.ts` 只做明确公共导出，不能通过索引文件循环依赖。`FeatureDefinition` 仅用于页面元信息，不承载业务状态。
+不为标准库调用、枚举构造或单纯类型转换增加转发函数；共享协议编码、输入校验和实际计算逻辑按职责封装。
 
-组件的业务状态、API 和 hooks 放同一个 feature 下；仅多处复用且无业务归属的组件进入 `shared/ui`。页面负责组合，基础组件不访问 API。
+根目录`.swift-format`定义格式规则。安装官方`swift-format`604.x（与Swift6.4匹配；Homebrew可用`brew install swift-format`），执行：
 
-样式使用 Tailwind utility 与 `styles/globals.css` 的主题 token，自绘 UI 不引入整套组件库。响应式布局、键盘焦点、状态反馈作为基础约定。
-
-后续主题体系必须支持亮色和暗色，默认跟随系统并允许用户手动切换；手动选择持久化。页面、输入框、图标按钮和 PoW 组件统一使用语义化 token，不各自维护一套颜色。首次加载避免主题闪烁，状态不能只靠颜色区分。
-
-当前只使用局部 React state。需要跨页面状态或查询缓存时再引入对应工具，避免提前安装未使用的状态库。API 客户端返回 unknown，由模块验证响应；所有页面不得直接散落 fetch。
-
-### 首页约束（待实现）
-
-`/` 展示大图标与 `WebDrop` 品牌字样，下方是初始四位的数字房间号输入框，右侧依次为随机、加号图标按钮。主页不添加冗余介绍、功能卡片或工作空间侧栏。随机按钮直接创建随机号码房间，加号按输入号码创建，冲突时提示；加入已有房间使用独立提交动作。
-
-房间号使用文本输入并配合数字键盘提示，不使用会丢失前导零的数值类型。支持粘贴、键盘操作、输入长度配置与图标按钮的无障碍名称。提交、PoW 与错误反馈按需展示，不凭“输入已满四位”无限自动重试。
-
-### 前端 PoW 组件（待实现）
-
-React 组件负责主题与验证状态展示，求解任务在 Web Worker 中执行，避免阻塞页面。至少区分待验证、获取挑战、计算中、提交校验、已通过、已过期、失败和冷却状态；支持取消、超时、卸载清理和旧请求失效处理。未知求解时长不展示虚假的确定进度或保证完成时间。
-
-前端不决定难度，不自行降低服务端要求，也不把客户端报告的“验证成功”当作授权依据。所有创建/加入入口，包括键盘提交和未来的二维码入口，遵循相同的服务端策略，不能通过换入口绕过验证。
-
-## 后端
-
-入口在 `WebdropServer`。`configure` 加载运行配置，`routes.swift` 注册版本化模块；每个模块按需创建 Routes、DTO、Service 和存储协议。不要为尚未确定的业务批量建空 Controller/Repository。
-
-模块状态使用 actor 或数据库提供的并发机制管理，不能让请求共享未保护的可变集合。配置错误应尽早失败，运行错误由 Vapor 中间件统一转成 HTTP 响应。
-
-后端统一错误格式为 `{ "error": { "code": "...", "message": "...", "requestId": "..." } }`，由 APIErrorMiddleware 转换业务错误和 Vapor 错误；客户端按 code 分支。Range 416 按协议为空响应体。
-
-新增模块文档时在 `Package.swift` 声明 exclude，避免 SwiftPM 把 Markdown 当作未处理资源报告。
-
-### DropRoom 与身份
-
-新建房间默认对持有效房间号的用户开放，不要求逐个批准；创建者自动获得 owner 权限。对外房间号初始四位且活跃期间唯一，支持随机创建与指定号码创建，按字符串存储，位数配置化；内部 ID、成员会话凭证、管理权限和文件分享短码分离。
-
-每个管理操作由服务端验证当前会话的房间成员关系和 owner 权限。创建者权限恢复、房间有效期、号码回收和成员踢出策略在业务实现前明确，不根据公开房间号推导管理密钥。
-
-### Swift 原生 PoW 组件
-
-- 挑战生成、难度策略、验证和防重放在 Swift 后端内实现；密码学原语使用成熟的 Swift 生态库，不手写哈希或签名算法。跨 Linux / macOS 的具体库在实现时确认，不引入额外验证服务。
-- 客户端求解、服务端低成本校验。服务端不替请求者暴力求解；验证前限制字段长度、数值范围和请求体大小。
-- 协议先定义版本、算法、挑战 ID、安全随机挑战、难度、签发/失效时间和操作绑定。精确定义哈希输入的字节编码与难度单位，以共同测试向量验证 Swift 与浏览器结果一致。
-- 挑战记录或签名保护服务端参数，难度和计数由服务端决定。提交证明时同时校验真实性、有效期、会话、目标操作、目标房间号及当前风控策略。
-- 一个证明只授权一次对应操作，不充当成员会话。证明消费与操作授权必须原子化，防止并发重放；重试幂等行为需在契约中明确。
-- 尝试次数增加时递增难度，冷却后逐步回落；初始难度、增长策略、上限与计数窗口配置化。具体阈值通过弱性能移动设备与桌面基准测试确定。
-- 计数结合会话、可信来源 IP 与全局异常信号，不能只保存在浏览器或按单个房间分桶。全部尝试计入流量预算，失败和异常作为加重信号；刷新、换码、重复申请挑战不能重置来源级成本。
-- 不使用“某房间累计被猜多少次”直接惩罚该房间所有正常访客，避免攻击者借此抬高他人的难度或锁死房间。
-- 限制挑战签发速率、并发求解数、服务端验证请求和已消费挑战存储占用。达到上限时返回冷却与重试信息，不无限加大计算量，也不把一次 PoW 通过当作永久免限流资格。
-- PoW 仅提高自动尝试的成本，不能证明请求者是人，也不增加四位码本身的随机空间；多维度限流和访问授权仍然必须执行。
-
-首版挑战、计数和验证在 Core/Store.swift 中以原子状态事务实现，协议工具在 Core/Protocol.swift，供创建/加入流程调用。未来拆分领域模块时保持原子消费语义。
-
-## 配置与部署
-
-开发前端请求 `/api/v1`，由 Vite 转发。根 `npm run dev` 只启动前端；后端在另一终端 `npm run dev:api`。不同服务的日志和退出行为互不影响。
-
-生产默认使用同一域名下的反向代理：`/api/*` 与 `/d/*` 转后端；其它路径指向前端并配置 `index.html` fallback。`/s/:slug` 的深链接也必须能直接刷新访问。反代不可把后端错误响应重写成 SPA 页面。
-
-当前没有配置生产 CORS，因为默认采用同源部署；改用跨域部署时再确定允许的 origin 与凭证策略。`VITE_*` 会写入浏览器产物，不得放私钥、设备密钥或存储凭证。
-
-## 修改后的检查
-
-```bash
-npm run check
-npm run lint
-npm run build
-npm run test:api
+```powershell
+npm run format:swift
+npm run check:swift
 ```
 
-接口行为变化增加实际路由测试，并同步契约。仅目录调整和样式修改无需堆叠实现细节测试。传输、过期和授权模块落地后再增加相应的集成测试。
+两条命令均调用`pwsh scripts/format-swift.ps1`；不依赖Node时可直接执行，检查加`-Check`。范围包括后端、测试、Package.swift和ICU探针；排除依赖、构建缓存及自动生成的前端资源。`npm test`包含Swift严格格式检查；更新formatter版本时统一更新脚本版本约束及配置。
 
-PoW 实现验收需覆盖：共同测试向量、难度升级/回落、篡改难度、挑战过期、并发重复消费、跨会话/跨房间/跨操作复用、重新申请挑战绕过、签发接口滥用，以及服务端拒绝后不产生有效成员会话。前端另检查亮暗主题、取消与重试、弱设备耗时和页面响应性；这些检查留待实现阶段。
+## 前端交互
 
-设计参考：[Swift Crypto](https://github.com/apple/swift-crypto)、[Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers)、[OWASP 资源与限流防护](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)。这些参考不代表本项目已接入对应功能。
+统一语义主题变量和动效参数，支持亮暗主题及prefers-reduced-motion。数字房间号按字符串处理，保留前导零；PoW在Worker执行并支持取消、超时和旧请求失效。输入区保留换行与输入法组合输入；新消息只在接近底部时自动跟随。剪贴板、媒体与下载按浏览器权限和能力处理。
 
-## 响应式、手绘 UI 与动画验收（待实现）
+手机实机验收覆盖软键盘、安全区、滚动恢复、后台恢复和媒体播放；无头Chrome通过不能代替Safari/iOS验收。
 
-- 桌面与手机共用业务状态，布局按可用空间调整；至少检查窄屏手机、横屏、平板与桌面，禁止整体横向溢出。触控目标建议至少 44 × 44 CSS px。
-- iOS 输入框可编辑文字以不小于 16 CSS px 作为实现基线，避免 CSS transform 缩小实际输入区域；房间号用 text + inputmode=numeric 保留前导零。以真实设备聚焦测试确认不发生意外放大，不能仅凭桌面模拟器判断。
-- viewport 使用 device-width 与 initial-scale=1；不通过 user-scalable=no 或 maximum-scale=1 禁用用户缩放来掩盖问题。处理安全区、动态视口和软键盘；必要时使用 VisualViewport，避免输入框和发送按钮被遮住。
-- 检查键盘弹出/收起、页面滚动恢复、横竖屏、输入法组合输入、粘贴、文件选择取消、后台恢复和返回导航。iOS 剪贴板、下载及视频播放必须实际验收，权限失败提供可操作反馈。
-- 手绘风格通过统一线条、略有变化的轮廓和少量自绘 SVG 表达，不牺牲文本可读性、对比度、焦点和可点击区域；避免大面积纹理或过多装饰。
-- 动画统一 token：微交互建议 120–180ms，弹层/页面建议 180–280ms，数值属初始建议。优先 transform/opacity，避免全局 transition: all；可中断，不阻塞请求结果和用户连续操作。
-- 尊重 prefers-reduced-motion：移除大幅位移、缩放和装饰性循环动画，保留必要状态反馈。主题切换同时处理页面、原生控件和弹层，避免闪白。
+## 验证
 
-参考：[Apple 视口说明](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/UsingtheViewport/UsingtheViewport.html)、[减少动态效果偏好](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion)。字体尺寸为项目实施基线，最终以目标 iOS 版本实机表现验收。
-
-## API 对齐规则
-
-后续业务接口以 [API 设计草案](../packages/contracts/api-design.md) 为讨论入口，后端已按正式 OpenAPI 与 protocol.md 实现；api-design.md 作为归档背景。openapi.yaml 只描述已实现接口。更改字段、权限、错误或事件时同步前后端及契约，不通过前端隐藏按钮代替服务端鉴权。
-
-## 已确认的 UI 风格与聊天展示
-
-视觉目标以 apps/web/GOAL.md 的 UI 样式目标为准：低饱和中性色、克制强调色和简洁手绘线条；亮暗模式统一语义色，不以弱化文字对比营造柔和感。本轮只记录目标，不新增组件、样式或动画实现。
-
-房间文字按聊天消息逐条展示，使用同一内容流承载文本与媒体卡片。发送者、时间、复制与发送状态清晰可辨。新消息到达时，只在用户接近底部时自动跟随；阅读历史时保持滚动位置。实时事件去重和分页加载不能造成消息重复、乱序或滚动跳跃。输入区需要保留换行、输入法组合输入和软键盘操作空间。
-
-首版已确认的权限、人数、文件大小和生命周期见 apps/api/GOAL.md；后端接口已实现，UI 仍待前端独立实现。
+运行适用的类型检查、lint、前端构建和后端测试。权限/生命周期边界使用可控时钟；并发、重放、重复请求及撤权补充有意义的测试。真实HTTP与浏览器测试使用独立DATA_DIR及测试服务，不消耗人工预览会话额度。未验证的平台、负载和故障注入需如实记录。

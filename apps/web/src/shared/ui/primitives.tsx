@@ -84,7 +84,7 @@ let dialogLocks = 0
 let previousBodyOverflow = ''
 
 // Bottom sheet on small screens, centered dialog on larger ones. Closes on Escape and restores focus.
-export function Dialog({ open, title, onClose, children }: { open: boolean; title: ReactNode; onClose: () => void; children: ReactNode }) {
+export function Dialog({ open, title, onClose, children, expanded = false, lightbox = false }: { lightbox?: boolean; expanded?: boolean; open: boolean; title: ReactNode; onClose: () => void; children: ReactNode }) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const backdropRef = useRef<HTMLDivElement>(null)
@@ -166,7 +166,7 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
 
   if (!open) return null
   return (
-    <div ref={backdropRef} onClickCapture={(event) => { if (exitAnimation.current) { event.preventDefault(); event.stopPropagation() } }} className="anim-fade fixed inset-0 z-40 flex items-end justify-center sm:items-center sm:p-6" role="presentation">
+    <div ref={backdropRef} onClickCapture={(event) => { if (exitAnimation.current) { event.preventDefault(); event.stopPropagation() } }} data-lightbox={lightbox} className="anim-fade fixed inset-0 z-40 flex items-end justify-center sm:items-center sm:p-6" role="presentation">
       <button type="button" aria-label="关闭" className="absolute inset-0 bg-scrim" onClick={closeWithFade} tabIndex={-1} />
       <div
         ref={panelRef}
@@ -174,15 +174,65 @@ export function Dialog({ open, title, onClose, children }: { open: boolean; titl
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        data-lightbox={lightbox}
+        data-expanded={expanded}
         className="anim-pop relative flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-line bg-raised shadow-[0_-8px_30px_rgb(0_0_0/0.08)] outline-none sm:max-w-md sm:rounded-3xl sm:shadow-[0_18px_50px_rgb(0_0_0/0.18)]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
+        <div className={lightbox ? "sr-only" : "flex items-center justify-between gap-4 border-b border-line px-5 py-4"}>
           <h2 id={titleId} className="min-w-0 break-all text-base font-semibold">{title}</h2>
           <IconButton icon="x" label="关闭" size="sm" onClick={closeWithFade} />
         </div>
-        <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-5">{children}</div>
+        <div className={lightbox ? "min-h-0" : "min-h-0 overflow-y-auto overscroll-contain px-5 py-5"}>{children}</div>
       </div>
+    </div>
+  )
+}
+
+// Floating room-level toast pill. The parent provides the overlay stack positioning
+// (absolute, below the top bar) so multiple toasts never fight for the same spot.
+// The pill stays mounted: show only flips classes, so enter/exit always transitions.
+// First-mount entry animates via @starting-style in .room-toast (no JS effect needed).
+export function RoomToast({ show, tone = 'info', message, actionLabel, onAction, busy = false, onClose }: {
+  show: boolean
+  tone?: 'info' | 'error' | 'success'
+  message: ReactNode
+  actionLabel?: string
+  onAction?: () => void
+  busy?: boolean
+  onClose?: () => void
+}) {
+  const toneClass = {
+    info: 'text-muted',
+    error: 'text-danger',
+    success: 'text-success',
+  }[tone]
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      aria-hidden={!show}
+      data-hidden={!show}
+      className="room-toast sketch-pill pointer-events-auto flex max-w-full items-center gap-2 border border-line-strong bg-raised px-4 py-2 text-sm shadow-sm"
+    >
+      <span className={`min-w-0 ${toneClass}`}>{message}</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        {busy && show && <Spinner className="size-3.5" />}
+        {actionLabel && onAction && !busy && (
+          <button type="button" onClick={onAction} className="rounded-full px-2 py-1 text-xs text-muted underline hover:text-ink">
+            {actionLabel}
+          </button>
+        )}
+        {onClose && show && !busy && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭提示"
+            className="grid size-7 place-items-center rounded-full text-muted transition-colors duration-150 hover:text-ink"
+          >
+            <Icon name="x" className="size-3.5" />
+          </button>
+        )}
+      </span>
     </div>
   )
 }

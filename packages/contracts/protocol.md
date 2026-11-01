@@ -1,13 +1,13 @@
 # WebDrop API v1 实现协议
 
-对应 `openapi.yaml` 0.5.0。前端仅依赖这些接口行为；后端当前为单进程、本地文件持久化实现。
+对应 `openapi.yaml` 0.6.1。前端仅依赖这些接口行为；后端当前为单进程、本地文件持久化实现。
 
 ## 建立会话与写操作
 
 1. `POST /api/v1/sessions`，JSON `{ "displayName": "我的手机" }`，带允许的 `Origin`。返回 Cookie 与 `data.csrfToken`。已有有效 Cookie 时恢复会话并返回 200，新会话为 201。
 2. 后续请求携带 Cookie；`GET /api/v1/session` 可重新获取 CSRF token 与成员关系。
 3. 所有写操作携带 `Origin`、`X-CSRF-Token`（建立会话除外）。创建房间/加入、发文字、创建上传、完成上传、创建分享还必须带 8–128 位可见 ASCII（0x21–0x7E，不含空格） `Idempotency-Key`。
-4. Cookie 有效期 7 天，HttpOnly、SameSite=Strict，生产环境 Secure。CSRF token 只通过响应体获得，不从 Cookie 读取。跨域请求不开放 CORS，部署使用同源反代。
+4. Cookie 有效期7天，HttpOnly，默认SameSite=Strict，生产环境Secure。显式允许的跨域来源通过HTTPS建立会话时使用SameSite=None、Secure；跨站Cookie仍可能被浏览器策略阻止。CSRF token只通过响应体获得，不从Cookie读取。默认同源访问，可通过CORS_ALLOWED_ORIGINS显式允许额外来源，客户端fetch使用credentials: include、EventSource使用withCredentials。
 
 displayName 可省略或为 null（新会话默认 Device）；非空字符串最多80个 UTF-8 字节，恢复会话时保留原名称。文件名最多240个 UTF-8 字节。OpenAPI 的 `x-maxUtf8Bytes` 表达字节限制，普通 `maxLength` 不能替代该限制；契约验证器同时执行两者。
 
@@ -71,10 +71,14 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 | upload.updated | 严格为 Asset schema（id、filename、sizeBytes、contentType、sha256、status、createdAt）；expiresAt/itemId 通过上传状态接口查询 |
 | room.updated | Room |
 | room.closed | `{id: roomId}` |
+| join-request.created | JoinRequest（id、displayName、createdAt、expiresAt、status） |
+| join-request.updated | JoinRequest（同意、拒绝、撤回或到期后的完整状态） |
+
+申请事件只向当前房间成员的流发送，待审批申请者无法订阅。首次创建pending申请发送一次created；同意、拒绝、到期的真实状态转换各发送一次updated。重试或复用已有pending申请不重复发事件。到期使用服务端时钟，清理/请求/SSE读取触发检查；关房后不再发申请状态变更。
 
 业务 Event 的 type/data 由 OpenAPI oneOf 严格关联；SSE 的 event 名必须等于信封 type。heartbeat 和 resync.required 不使用业务信封，均为严格的 `{eventCursor: string}`，映射见 `x-sse-events`。
 
-每 2 秒（capabilities.heartbeatSeconds）发送 `heartbeat`，data 为 `{eventCursor}`；最多连接 120 秒后正常结束，由 EventSource 重连。每设备最多 3 条订阅，全局最多 200 条。被踢、会话过期会结束现有流，重连再次鉴权。房间关闭先发关闭事件再结束；对已有连接，即使游标已失效也优先发送 room.closed，不发送 resync.required。新订阅仍按当前权限拒绝。发送背压由网络写入处理，事件不会无限缓存在每个订阅中。
+新事件主动唤醒订阅，空闲每2秒（capabilities.heartbeatSeconds）发送 `heartbeat`，data 为 `{eventCursor}`；最多连接 120 秒后正常结束，由 EventSource 重连。每设备最多 3 条订阅，全局最多 200 条。被踢、会话过期会结束现有流，重连再次鉴权。房间关闭先发关闭事件再结束；对已有连接，即使游标已失效也优先发送 room.closed，不发送 resync.required。新订阅仍按当前权限拒绝。发送背压由网络写入处理，事件不会无限缓存在每个订阅中。
 
 ## 临时内存与磁盘存储
 
@@ -97,7 +101,7 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 
 未完成上传 1 小时过期。中断标记 failed，可完整重传；不支持分片断点续传。正在上传、已 uploaded 或 ready 的资源不能重复 PUT；完成请求可幂等重试。取消或踢出会阻止后续写入完成。最多 20 条同时上传；单房 200 个保留上传记录，存储配额单房 500 MB、全局 2 GB，失败待重传上传仍占配额，取消/过期后释放。
 
-文件名不参与磁盘路径。前端声明的 MIME 仅记录，响应类型由签名识别决定：PNG、JPEG、GIF、WebP、常见 MP4 可 inline；其他格式作为 application/octet-stream attachment。SVG/HTML 不内联。所有格式可作为普通文件传输；媒体解码能力由浏览器决定。
+文件名不参与磁盘路径。前端声明的 MIME 仅记录，响应类型由签名识别决定：PNG、JPEG、GIF、WebP、MP3、WAV、Ogg、FLAC、AIFF、WebM、MP4（ISO 基础媒体常见 brand）与 QuickTime 可 inline；其他格式作为 application/octet-stream attachment。SVG/HTML 不内联。所有格式可作为普通文件传输；媒体解码能力由浏览器决定。
 
 下载支持 GET/HEAD 和单一 Range：起止、起始到末尾、后缀；合法范围返回206，非法/多段返回416及 `Content-Range: bytes */size`。链接撤销或房间关闭阻止新的读取；已经开始的流可完成，已下载数据无法收回。
 
@@ -111,9 +115,13 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 
 ## 部署边界与限额
 
-生产设置 PUBLIC_ORIGIN、WEB_ORIGINS 为确切 HTTPS origin，不带路径和尾斜杠，反向代理同源转发 `/api/*`、`/d/*`。默认不信任 X-Forwarded-For：来源限流按连接 peer IP，代理部署需在可信边缘补充真实来源限流；后端绝不直接接受客户端伪造来源头。
+页面和API共用API_PORT，无需PUBLIC_ORIGIN/WEB_ORIGINS；这两个旧环境变量不再读取。写请求默认要求Origin与请求Host及协议一致，默认端口归一化，缺少/非法Origin或跨站写入返回403 ORIGIN_FORBIDDEN；CSRF检查保持。分享链接在HTTP响应边界按当前请求来源生成绝对URL，旧幂等缓存中的链接也按当前来源重新生成，不改变当前授权检查。
 
-默认上限：活跃房间500，每会话同时创建5个；来源创建10次/小时，会话建立20次/10分钟；普通 API 来源600次/分钟、全局3000次/分钟；公开读取120次/分钟/来源。生产需要在边缘加全局连接/带宽限额。单进程文件快照适合首版小规模自托管，不能多实例共用 DATA_DIR。
+可选CORS_ALLOWED_ORIGINS为逗号分隔的完整HTTP(S)来源，空值仅同源，不允许通配符、路径、null。允许的额外来源可发起跨站写请求，但仍须有效Cookie/CSRF及当前权限。OPTIONS预检校验来源、GET/HEAD/POST/PUT/PATCH/DELETE及请求头（Accept、Content-Type、Origin、X-CSRF-Token、Idempotency-Key、Last-Event-ID、Range），成功204，拒绝403。允许来源的实际响应和错误响应包含明确的Access-Control-Allow-Origin、Allow-Credentials及Vary: Origin；可读取X-Request-ID、Retry-After、Content-Range、Content-Disposition、Accept-Ranges。
+
+反向代理同源转发 `/api/*`、`/d/*`，保留原始Host并覆盖X-Forwarded-Proto为实际http/https；不按X-Forwarded-Host重写来源。HTTPS生产运行--env production，代理后端端口不必与公网端口相同。直接访问按实际Host端口生成链接，CLI端口覆盖亦无需同步其它origin配置。默认不信任 X-Forwarded-For：来源限流按连接 peer IP，代理部署需在可信边缘补充真实来源限流；后端绝不直接接受客户端伪造来源头。
+
+默认上限：活跃房间500（MAX_ROOMS），每会话同时创建5个（MAX_OWNED_ROOMS）；来源创建10次/小时，会话建立20次/10分钟；普通 API 来源600次/分钟、全局3000次/分钟；公开读取120次/分钟/来源。生产需要在边缘加全局连接/带宽限额。单进程文件快照适合首版小规模自托管，不能多实例共用 DATA_DIR。
 
 错误状态码、业务 code 和客户端恢复策略见 [errors.md](errors.md)。SSE 已返回200后发生撤权或过期时关闭流，不向流中插入 JSON 错误信封；重连响应重新执行 HTTP 鉴权。
 
@@ -126,3 +134,16 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 可选 approvalRequired 设置与密码独立。开启后，新成员通过密码与PoW校验后返回202申请状态，房主批准后才获得成员权限。接口、轮询与生命周期见 [room-approval.md](room-approval.md)。
 
 最后一个在线成员主动离开后，全员离线计时从离开时刻开始；GET session不刷新房间租约，到期清理在后续请求失败时仍提交。详见room-lifecycle.md。
+
+房间容量可通过GET /api/v1/room-capacity查询；capabilities增加maxRooms与maxOwnedRooms，配置、并发及余量语义见 [room-capacity.md](room-capacity.md)。
+
+内嵌前端的发布构建由同一二进制提供页面和静态资源，GET /返回HTML；纯API/开发构建保留根服务JSON。/api、/d与健康探针不会回退成HTML。该0.6.1部署补充不更改既有业务API。
+
+兼容性补充：此调整保留0.6.1业务端点、JSON字段、Cookie名称及权限语义；部署来源改为请求同源自动识别，原跨域前端需迁移到CORS_ALLOWED_ORIGINS。开发代理须保留Host，分享URL保持绝对URI。
+
+服务进程停止会主动结束SSE连接，不产生room.closed，不关闭房间或撤销成员；服务重启后原会话按现有权限恢复、重连/重放。申请SSE类型为0.6.1补充，旧客户端可忽略未知类型，owner保留30秒兜底和面板重读，待审批者继续状态轮询。
+
+PATCH /api/v1/session 接受严格的{displayName:string}，Cookie+Origin+CSRF鉴权；名字非空且不超过80 UTF-8字节。200返回与GET session一致的完整会话体。仅更新会话名，已有成员及待审批申请的名字快照不变；新建房/新入房使用新名。
+申请人DELETE本人有效pending申请转为withdrawn并发join-request.updated；owner代撤403、终态重复撤409，不授予权限、不占申请容量。两个接口是0.6.1的增量补充，已有字段及成员快照兼容。
+
+兼容提示：JoinRequest.status新增withdrawn终态，严格枚举的旧申请等待客户端需同步支持该值；当前前端已支持。

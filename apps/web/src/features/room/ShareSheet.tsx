@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Dialog, StatusLine } from '@/shared/ui/primitives'
 import { Icon } from '@/shared/ui/Icon'
-import { createLink, fetchRoomLinks, revokeLink } from '@/features/room/api'
+import { fetchRoomLinks, revokeLink } from '@/features/room/api'
 import { formatRemaining } from '@/features/room/format'
 import { copyText } from '@/shared/clipboard'
-import { newIdempotencyKey } from '@/shared/api/session-token'
 import type { ShareLink } from '@/shared/types/domain'
 
 type Props = {
@@ -17,8 +16,6 @@ type Props = {
 // The list endpoint returns only the caller's links unless they own the room.
 // Every returned link is therefore revocable by this session; the server still authorizes writes.
 export function ShareSheet({ assetId, filename, roomId, onClose }: Props) {
-  const createKey = useRef(newIdempotencyKey())
-  const pending = useRef(false)
   const [links, setLinks] = useState<ShareLink[]>([])
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const loading = assetId !== null && loadedFor !== assetId
@@ -51,24 +48,6 @@ export function ShareSheet({ assetId, filename, roomId, onClose }: Props) {
     return () => window.clearInterval(id)
   }, [])
 
-  const create = async () => {
-    if (!assetId || pending.current) return
-    pending.current = true
-    setBusy(true)
-    setNotice(null)
-    try {
-      const link = await createLink(assetId, createKey.current)
-      createKey.current = newIdempotencyKey()
-      setLinks((list) => [link, ...list.filter((existing) => existing.id !== link.id)])
-      setNotice({ tone: 'success', text: '已创建分享链接' })
-    } catch {
-      setNotice({ tone: 'error', text: '创建失败，请重试' })
-    } finally {
-      pending.current = false
-      setBusy(false)
-    }
-  }
-
   const revoke = async (link: ShareLink) => {
     setBusy(true)
     try {
@@ -78,7 +57,6 @@ export function ShareSheet({ assetId, filename, roomId, onClose }: Props) {
     } catch {
       setNotice({ tone: 'error', text: '撤销失败，请重试' })
     } finally {
-      pending.current = false
       setBusy(false)
     }
   }
@@ -91,11 +69,11 @@ export function ShareSheet({ assetId, filename, roomId, onClose }: Props) {
   const active = links.filter((l) => !l.revokedAt && Date.parse(l.expiresAt) > now)
 
   return (
-    <Dialog open={assetId !== null} title={`分享 ${filename}`} onClose={onClose}>
-      <p className="text-sm leading-6 text-muted">有效期以创建结果为准。房间关闭或链接撤销后无法继续访问。</p>
+    <Dialog open={assetId !== null} title={`链接管理 · ${filename}`} onClose={onClose}>
+      <p className="text-sm leading-6 text-muted">管理已复制的分享链接。房间关闭或链接撤销后无法继续访问。</p>
       <div className="mt-5 flex flex-col gap-3">
         {loading && <p className="text-sm text-muted">正在读取链接…</p>}
-        {!loading && active.length === 0 && <p className="text-sm text-muted">还没有有效链接。</p>}
+        {!loading && active.length === 0 && <p className="text-sm text-muted">暂无有效链接。点击附件旁的“复制链接”即可创建并复制。</p>}
         {active.map((link) => (
           <div key={link.id} className="sketch border border-line bg-canvas p-4">
             <p className="break-all font-mono text-xs text-ink">{link.shareUrl}</p>
@@ -119,7 +97,6 @@ export function ShareSheet({ assetId, filename, roomId, onClose }: Props) {
         ))}
       </div>
       <div className="mt-6 flex flex-col gap-3">
-        <Button variant="primary" busy={busy} onClick={create} className="w-full">创建分享链接</Button>
         <StatusLine tone={notice?.tone === 'error' ? 'error' : notice ? 'success' : 'info'}>{notice?.text}</StatusLine>
       </div>
     </Dialog>

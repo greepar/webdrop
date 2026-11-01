@@ -142,6 +142,33 @@
     border-radius: 999px 22px 999px 20px / 26px 999px 22px 999px;
   }
 
+  /* Fullscreen belongs to the same quiet surface as the inline player: the frame fills the screen,
+     the video letterboxes inside it, and the custom control bar stays available on top. */
+  .media-frame:fullscreen {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: #000;
+  }
+
+  .media-frame:fullscreen .media-stage {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .media-frame:fullscreen video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: contain;
+  }
+
   .anim-enter {
     animation: wd-enter 260ms var(--ease-out) both;
   }
@@ -170,6 +197,34 @@
 
   .anim-swap[data-dir="back"] {
     animation: wd-swap-back 200ms var(--ease-out) both;
+  }
+
+  /* Room-level toast pill: opacity + small rise/scale, symmetric enter/exit.
+     The parent overlay is absolute below the top bar, so showing/hiding never
+     moves messages, the composer, or the file list. Hidden state uses
+     display:none with allow-discrete so the exit fades first, then collapses
+     without leaving a gap; first-mount entry uses @starting-style. */
+  .room-toast {
+    display: flex;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out),
+      display 200ms var(--ease-out) allow-discrete;
+  }
+
+  @starting-style {
+    .room-toast:not([data-hidden="true"]) {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.98);
+    }
+  }
+
+  .room-toast[data-hidden="true"] {
+    display: none;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    pointer-events: none;
   }
 
   .anim-title {
@@ -216,6 +271,12 @@
     animation-name: wd-fade;
   }
 
+  .room-toast {
+    transform: none;
+    transition-property: opacity;
+    transition-duration: 150ms;
+  }
+
   .anim-spin {
     animation: none;
     opacity: 0.65;
@@ -237,4 +298,95 @@
     min-block-size: 44px;
     min-inline-size: 44px;
   }
+}
+
+/* Unlayered rules must outrank Tailwind's inline media sizing utilities. */
+.media-frame:fullscreen { width: 100vw; height: 100dvh; max-width: none; min-width: 0; border-radius: 0; }
+.media-frame:fullscreen .media-stage { position: relative; flex: 1; min-height: 0; width: 100%; }
+.media-frame:fullscreen video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; }
+[role="dialog"][data-expanded="true"] { width: 96vw; max-width: 96vw; max-height: 96dvh; border-radius: 16px; margin: auto; }
+
+.media-controls { transition: opacity 180ms ease, transform 180ms ease; }
+.media-frame[data-controls-visible="false"] .media-controls { opacity: 0; transform: translateY(100%); pointer-events: none; }
+.media-frame[data-controls-visible="false"]:has(:focus-visible) .media-controls { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .media-controls { transition: none; } }
+
+/* Capability-based visibility also covers wide tablets and narrow desktop windows.
+   Desktop fine-pointer: the actions wrapper collapses with an animatable grid
+   row (0fr -> 1fr) so surrounding messages ride the height change frame by
+   frame instead of jumping; the inner row fades + rises. Touch keeps them
+   always visible. */
+.message-actions-clip {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 220ms var(--ease-out), margin 220ms var(--ease-out);
+}
+.message-actions-clip > .message-copy-actions {
+  overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  visibility: visible;
+  transition: opacity 180ms var(--ease-out), transform 220ms var(--ease-out),
+    visibility 220ms var(--ease-out) allow-discrete;
+}
+.message-actions-clip--asset { margin-top: 6px; }
+.message-actions-clip--inline { margin-top: 0; }
+/* An actions row with no buttons takes no space on any input. */
+.message-actions-clip:has(.message-copy-actions:empty) { display: none; }
+li.justify-end .message-copy-actions { transform-origin: top right; }
+li.justify-start .message-copy-actions { transform-origin: top left; }
+@media (hover: hover) and (pointer: fine) {
+  .message-bubble:not(:hover):not(:focus-within) .message-actions-clip {
+    grid-template-rows: 0fr;
+  }
+  .message-bubble:not(:hover):not(:focus-within) .message-actions-clip--asset {
+    margin-top: 0;
+  }
+  /* Cancel the bubble's own flex gap while collapsed so zero height means zero space. */
+  .message-bubble:not(:hover):not(:focus-within) .message-actions-clip--inline {
+    margin-top: -6px;
+  }
+  .message-bubble:not(:hover):not(:focus-within) .message-copy-actions {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    pointer-events: none;
+    visibility: hidden;
+  }
+  @starting-style {
+    .message-bubble:hover .message-copy-actions,
+    .message-bubble:focus-within .message-copy-actions {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+}
+@media (any-pointer: coarse) {
+  .message-actions-clip { grid-template-rows: 1fr; }
+  .message-copy-actions { opacity: 1; transform: none; pointer-events: auto; visibility: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .message-actions-clip { transition-duration: 0s; }
+  .message-actions-clip > .message-copy-actions {
+    transform: none;
+    transition: opacity 150ms ease-out, visibility 150ms ease-out allow-discrete;
+  }
+}
+
+/* Image lightbox: only the image sits above the dimmed page. */
+[data-lightbox="true"][role="presentation"] { align-items: center; padding: 0; }
+[data-lightbox="true"][role="presentation"] > button { background: rgb(0 0 0 / .8); }
+[role="dialog"][data-lightbox="true"] {
+  width: auto; max-width: 96vw; max-height: 92dvh;
+  border: 0; border-radius: 0; background: transparent;
+  box-shadow: none; padding: 0 !important; overflow: visible;
+}
+
+/* Compact video controls; touch devices retain comfortable hit targets. */
+.media-controls > button { width: 32px; height: 32px; }
+.media-controls > [role="slider"] { height: 36px; }
+@media (pointer: coarse) {
+  .media-controls > [role="slider"] { height: 44px; }
 }
