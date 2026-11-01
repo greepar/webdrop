@@ -116,5 +116,5 @@ if ($IsWindows) {
 
 if ($IsWindows) {
     $backoff = Join-Path $ScratchPath 'checkouts/async-http-client/Sources/AsyncHTTPClient/ConnectionPool/State Machine/HTTPConnectionPool+Backoff.swift'
-    Apply-CheckedPatch $backoff "#else`nimport func Glibc.pow" "#elseif os(Windows)`nimport func ucrt.pow`n#else`nimport func Glibc.pow"
+    Apply-CheckedPatch $backoff "import func Android.pow`n#else`nimport func Glibc.pow" "import func Android.pow`n#elseif os(Windows)`nimport func ucrt.pow`n#else`nimport func Glibc.pow"
 }
