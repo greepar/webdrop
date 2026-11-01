@@ -98,3 +98,11 @@
 
 - [x] release.yml在v*标签推送时构建Linux x86-64/ARM64及macOS ARM64/x86-64，固定Swift6.4.2和Action SHA，执行类型/lint、后端测试、契约检查及原生目标真实HTTP/SSE停机验收；全部构建成功后发布Release文件。手动触发只生成Artifacts。
 - [x] actionlint及diff空白检查通过。实际GitHub runner及发布结果待首次运行验收，ARM64 Linux运行仍需目标机器验证。
+
+## Actions跨平台与GHCR（进行中）
+
+- [x] Actions升级Node24版checkout/setup-node/upload/download，Swift通过官方Swiftly安装并校验Linux签名。修复原安装Action缺少版本清单/签名key以及macOS重复安装PowerShell失败。
+- [x] ICU工具固定到79.1源提交与SHA256，避免Ubuntu系统旧icupkg读取SDK数据时的字符串容量错误。Linux x86-64及ARM64已在run41301861787通过测试、静态内嵌构建与ELF检查，x86-64真实HTTP/SSE停机恢复通过。
+- [x] 新增scratch OCI镜像，非root65532、只读根、/data卷、自带空配置绕过首次生成退出。双架构清单amd64/arm64已在GHCR发布sha-930467093a49；匿名拉取及本机Podman再次通过页面、200KB/2MB HTTP schema、卷恢复与SIGTERM验收。镜像不依赖Swift/Node运行时。
+- [x] Linux OCI任务独立等待Linux产物，手动构建发布sha标签，版本tag验证后才发版本/latest；正式Release仍等全部平台任务通过，本轮没有新增tag。
+- [ ] macOS使用可核对依赖补丁绕过旧系统Foundation缺少Data span API；ARM64测试已通过、发布编译待结果。Windows提供原生Win32存储锁、zlib平台条件和HTTP cookie日期兼容，x86-64/ARM64原生构建运行待验收。Windows当前打包目标仍为exe+DLL的ZIP，不能视为单可执行文件已实现。
