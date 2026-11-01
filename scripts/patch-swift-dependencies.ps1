@@ -113,3 +113,8 @@ if ($IsWindows) {
     $websocket = Join-Path $ScratchPath 'checkouts/websocket-kit/Sources/WebSocketKit/WebSocketClient.swift'
     Apply-CheckedPatch $websocket 'ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY)' 'ChannelOptions.socketOption(.tcp_nodelay)'
 }
+
+if ($IsWindows) {
+    $backoff = Join-Path $ScratchPath 'checkouts/async-http-client/Sources/AsyncHTTPClient/ConnectionPool/State Machine/HTTPConnectionPool+Backoff.swift'
+    Apply-CheckedPatch $backoff "#else`nimport func Glibc.pow" "#elseif os(Windows)`nimport func ucrt.pow`n#else`nimport func Glibc.pow"
+}
