@@ -124,7 +124,7 @@ swift sdk install 'https://download.swift.org/swift-6.4.2-release/static-sdk/swi
 
 脚本只构建并输出本地文件，不自动创建或上传GitHub Release。输出为`dist/api/webdrop-<Target>`与同名`.json`清单（目标、字节数、SHA-256、Swift版本、静态/strip状态）。`-KeepSymbols`另保留`dist/api/symbols/`。每个目标使用独立scratch目录；linux-x86_64沿用`.build/static-linux`缓存。构建过程中不重启开发后端、不覆盖运行数据。脚本已取代原bash入口。
 
-GitHub Actions后续可按目标拆matrix，各runner安装匹配Swift/SDK和PowerShell后统一调用上述入口，并上传产物与JSON清单。ARM运行与macOS构建/运行目前仍待对应runner验收；不把尚未运行的matrix写成已支持发布平台。
+GitHub Actions见.github/workflows/release.yml：v*标签触发Linux x86-64/ARM64和macOS x86-64/ARM64构建，全部成功后创建Release并上传二进制与JSON清单。支持手动构建但不发布；ARM交叉产物仅做静态/架构校验，其余目标执行真实HTTP/SSE停机验收。首次Actions结果以实际runner为准。
 
 Linux x86-64完全静态产物可复制到目标机器，仍需可写DATA_DIR与环境配置；默认内嵌前端，反向代理可统一转发全部路径。Swift运行库及C/C++库已包含在文件内。默认使用ICU语言子集；实际字节数见产物JSON清单，[体积分析](../../docs/backend-binary-size.md)记录不同优化选项的历史基线、Bloaty与验证限制。
 

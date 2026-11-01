@@ -93,3 +93,8 @@
 - [x] RoomActions移除管理面板pendingCount覆盖SSE watchedCount的双状态优先级，面板与事件重读写入同一个计数；已打开过面板后撤回不会残留红点/提醒。approval-sse专项增加打开/关闭面板再撤回场景，红点及提醒均消失，未依赖30秒轮询。
 - [x] 本地5174代理实际连接的18080仍为15:51旧后端（旧Origin白名单及无申请SSE）；保留/tmp/webdrop-data重启为当前构建。局域网192.168.1.201:5174 POST sessions实际201，外站Origin仍403；无需放开来源检查。
 - [x] 前端类型检查通过；lint无错误，现有DeviceNameEditor的set-state-in-effect警告未在本轮处理。隔离真实SSE浏览器回归通过。
+
+## GitHub标签发布入口
+
+- [x] release.yml在v*标签推送时构建Linux x86-64/ARM64及macOS ARM64/x86-64，固定Swift6.4.2和Action SHA，执行类型/lint、后端测试、契约检查及原生目标真实HTTP/SSE停机验收；全部构建成功后发布Release文件。手动触发只生成Artifacts。
+- [x] actionlint及diff空白检查通过。实际GitHub runner及发布结果待首次运行验收，ARM64 Linux运行仍需目标机器验证。
