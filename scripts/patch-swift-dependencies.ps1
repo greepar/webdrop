@@ -4,9 +4,10 @@ param([Parameter(Mandatory)][string]$ScratchPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 function Apply-CheckedPatch([string]$Path, [string]$Before, [string]$After) {
-    $text = [IO.File]::ReadAllText($Path)
+    $text = [IO.File]::ReadAllText($Path).Replace("`r`n", "`n")
     if ($text.Contains($After)) { return }
     if (-not $text.Contains($Before)) { throw "Dependency patch no longer matches: $Path. Recheck the locked dependency version." }
+    (Get-Item -LiteralPath $Path).IsReadOnly = $false
     [IO.File]::WriteAllText($Path, $text.Replace($Before, $After), [Text.UTF8Encoding]::new($false))
 }
 # swift-crypto 5.0.3: Foundation on macOS 15 lacks Data.mutableBytes.
