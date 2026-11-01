@@ -16,7 +16,7 @@ internal enum WebDropWindowsConsole {
                 return pending
             }
             for callback in pending { callback() }
-            return !pending.isEmpty
+            return WindowsBool(!pending.isEmpty)
         },
         true
     )
