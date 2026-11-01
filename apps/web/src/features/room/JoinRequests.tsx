@@ -12,6 +12,8 @@ export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (c
   // null means "not loaded yet"; no separate loading state to keep in sync.
   const [requests, setRequests] = useState<JoinRequest[] | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // A ref guard, not just state: two clicks in the same tick both read the old state otherwise.
+  const busyRef = useRef<string | null>(null)
   const [notice, setNotice] = useState<{ tone: 'error' | 'success'; text: string } | null>(null)
   const retryUntil = useRef(0)
   const onCountRef = useRef(onCount)
@@ -63,7 +65,8 @@ export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (c
   }, [roomId, apply])
 
   const decide = async (request: JoinRequest, decision: 'approve' | 'reject') => {
-    if (busyId) return
+    if (busyRef.current) return
+    busyRef.current = request.id
     setBusyId(request.id)
     setNotice(null)
     try {
@@ -85,6 +88,7 @@ export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (c
         setNotice({ tone: 'error', text: '操作未完成，请重试' })
       }
     } finally {
+      busyRef.current = null
       setBusyId(null)
     }
   }
@@ -101,8 +105,25 @@ export function JoinRequests({ roomId, onCount }: { roomId: string; onCount?: (c
               <p className="mt-0.5 text-xs text-muted">申请于 {formatTime(request.createdAt)}</p>
             </div>
             <div className="flex shrink-0 gap-1">
-              <Button variant="ghost" className="min-h-9 px-3 text-xs" disabled={busyId !== null} onClick={() => decide(request, 'reject')}>拒绝</Button>
-              <Button variant="secondary" className="min-h-9 px-3 text-xs" disabled={busyId !== null} busy={busyId === request.id} onClick={() => decide(request, 'approve')}>同意</Button>
+              <Button
+                variant="ghost"
+                className="min-h-11 px-3 text-xs"
+                aria-label={`拒绝 ${request.displayName} 的申请`}
+                disabled={busyId !== null}
+                onClick={() => decide(request, 'reject')}
+              >
+                拒绝
+              </Button>
+              <Button
+                variant="secondary"
+                className="min-h-11 px-3 text-xs"
+                aria-label={`同意 ${request.displayName} 加入`}
+                disabled={busyId !== null}
+                busy={busyId === request.id}
+                onClick={() => decide(request, 'approve')}
+              >
+                同意
+              </Button>
             </div>
           </li>
         ))}

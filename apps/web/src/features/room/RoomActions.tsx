@@ -20,6 +20,8 @@ export function RoomActions({ room, members, selfMemberId, isOwner, onChanged, o
   const [open, setOpen] = useState<'members' | 'manage' | null>(null)
   const [notice, setNotice] = useState<{ tone: 'error' | 'success'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  // Synchronous guard so a double click cannot send the same owner action twice.
+  const busyRef = useRef(false)
   const [confirm, setConfirm] = useState<null | { kind: 'close' | 'leave' | 'kick'; memberId?: string }>(null)
   // Direction of the in-dialog step change, so forward and back animate opposite ways.
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
@@ -46,6 +48,8 @@ export function RoomActions({ room, members, selfMemberId, isOwner, onChanged, o
   }, [confirm, open])
 
   const run = async (action: () => Promise<unknown>, success: string, after?: () => void) => {
+    if (busyRef.current) return
+    busyRef.current = true
     setBusy(true)
     setNotice(null)
     try {
@@ -57,6 +61,7 @@ export function RoomActions({ room, members, selfMemberId, isOwner, onChanged, o
       const status = typeof error === 'object' && error !== null && 'status' in error ? (error as { status: number }).status : 0
       setNotice({ tone: 'error', text: status === 403 ? '没有权限执行这个操作' : status === 409 ? '房间状态已变化，请刷新后重试' : '操作未完成，请重试' })
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
