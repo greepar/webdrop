@@ -118,3 +118,15 @@ if ($IsWindows) {
     $backoff = Join-Path $ScratchPath 'checkouts/async-http-client/Sources/AsyncHTTPClient/ConnectionPool/State Machine/HTTPConnectionPool+Backoff.swift'
     Apply-CheckedPatch $backoff "import func Android.pow`n#else`nimport func Glibc.pow" "import func Android.pow`n#elseif os(Windows)`nimport func ucrt.pow`n#else`nimport func Glibc.pow"
 }
+
+if ($IsWindows) {
+    # The vendored compression target supplies its own zlib symbols.
+    $extrasManifest = Join-Path $ScratchPath 'checkouts/swift-nio-extras/Package.swift'
+    Apply-CheckedPatch $extrasManifest '            .linkedLibrary("zlib", .when(platforms: [.windows])),' '            // WebDrop: Windows uses the vendored CNIOExtrasZlib implementation.'
+    # Both Crypto and NIOSSL embed BoringSSL. Namespace this Windows TLS
+    # destructor pointer as well as its /INCLUDE pragma; retain both callbacks.
+    $thread = Join-Path $ScratchPath 'checkouts/swift-nio-ssl/Sources/CNIOBoringSSL/crypto/thread_win.cc'
+    if (-not [IO.File]::ReadAllText($thread).Contains('CNIOBoringSSL_thread_callback')) {
+        Apply-CheckedPatch $thread '#define STRINGIFY(x) #x' "#ifndef p_thread_callback_boringssl`n#define p_thread_callback_boringssl CNIOBoringSSL_thread_callback`n#endif`n#define STRINGIFY(x) #x"
+    }
+}
