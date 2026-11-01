@@ -1,0 +1,9 @@
+*
+!Containerfile
+!LICENSE
+!containers/
+!containers/**
+!dist/
+!dist/api/
+!dist/api/webdrop-linux-x86_64
+!dist/api/webdrop-linux-arm64

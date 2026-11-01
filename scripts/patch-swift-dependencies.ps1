@@ -13,7 +13,17 @@ function Apply-CheckedPatch([string]$Path, [string]$Before, [string]$After) {
 # The dependency already uses the equivalent unsafe-buffer path on visionOS 1.0.
 if ($IsMacOS) {
     $path = Join-Path $ScratchPath 'checkouts/swift-crypto/Sources/CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift'
-    Apply-CheckedPatch $path 'if #available(visionOS 1.1, *) {' 'if #available(macOS 9999, visionOS 1.1, *) {'
+    $before = @'
+            var outputSpan = output.mutableBytes
+            try open(message: &outputSpan, nonce: nonceBytes, tag: tagBytes, authenticatedData: authenticatedData)
+'@
+    $after = @'
+            try output.withUnsafeMutableBytes { bytes in
+                var outputSpan = bytes.mutableBytes
+                try open(message: &outputSpan, nonce: nonceBytes, tag: tagBytes, authenticatedData: authenticatedData)
+            }
+'@
+    Apply-CheckedPatch $path $before $after
 }
 # swift-nio-extras 1.35.2 ships a configure-generated Unix zlib header.
 if ($IsWindows) {

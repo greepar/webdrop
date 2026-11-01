@@ -25,6 +25,108 @@ jobs:
             runner: ubuntu-24.04
           - target: linux-arm64
             runner: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.ref }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install Swift with official Swiftly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SWIFTLY_HOME_DIR="$RUNNER_TEMP/swiftly-home"
+          export SWIFTLY_BIN_DIR="$RUNNER_TEMP/swiftly-bin"
+          mkdir -p "$SWIFTLY_HOME_DIR" "$SWIFTLY_BIN_DIR"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            sudo apt-get update
+            sudo apt-get install -y libcurl4-openssl-dev
+            curl -fLsS https://www.swift.org/keys/all-keys.asc | gpg --import
+            url="https://download.swift.org/swiftly/linux/swiftly-1.1.2-$(uname -m).tar.gz"
+            curl -fLsS "$url" -o "$RUNNER_TEMP/swiftly.tar.gz"
+            curl -fLsS "$url.sig" -o "$RUNNER_TEMP/swiftly.tar.gz.sig"
+            gpg --verify "$RUNNER_TEMP/swiftly.tar.gz.sig" "$RUNNER_TEMP/swiftly.tar.gz"
+            tar xzf "$RUNNER_TEMP/swiftly.tar.gz" -C "$SWIFTLY_BIN_DIR"
+          else
+            curl -fLsS https://download.swift.org/swiftly/darwin/swiftly.pkg -o "$RUNNER_TEMP/swiftly.pkg"
+            installer -pkg "$RUNNER_TEMP/swiftly.pkg" -target CurrentUserHomeDirectory
+            cp "$HOME/.swiftly/bin/swiftly" "$SWIFTLY_BIN_DIR/swiftly"
+          fi
+          export PATH="$SWIFTLY_BIN_DIR:$PATH"
+          swiftly init --skip-install --quiet-shell-followup --assume-yes --no-modify-profile
+          swiftly install --use 6.4.2 --assume-yes --post-install-file "$RUNNER_TEMP/swift-post-install.sh"
+          if [[ -f "$RUNNER_TEMP/swift-post-install.sh" ]]; then bash "$RUNNER_TEMP/swift-post-install.sh"; fi
+          echo "SWIFTLY_HOME_DIR=$SWIFTLY_HOME_DIR" >> "$GITHUB_ENV"
+          echo "SWIFTLY_BIN_DIR=$SWIFTLY_BIN_DIR" >> "$GITHUB_ENV"
+          echo "$SWIFTLY_BIN_DIR" >> "$GITHUB_PATH"
+          swiftly use --print-location >> "$GITHUB_PATH"
+          swift --version
+      - name: Install Linux ICU subset tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm make g++
+          curl -fLsS https://github.com/unicode-org/icu/archive/ddc6b66926bfac6036144ca9902992a0d6d50af9.tar.gz -o "$RUNNER_TEMP/icu.tar.gz"
+          mkdir "$RUNNER_TEMP/icu-source"
+          tar xzf "$RUNNER_TEMP/icu.tar.gz" -C "$RUNNER_TEMP/icu-source" --strip-components=1
+          cd "$RUNNER_TEMP/icu-source/icu4c/source"
+          ./configure --prefix="$RUNNER_TEMP/icu-tools" --disable-tests --disable-samples --disable-extras --disable-shared --enable-static
+          make -j3
+          make install
+          echo "$RUNNER_TEMP/icu-tools/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/icu-tools/sbin" >> "$GITHUB_PATH"
+      - name: Verify PowerShell
+        run: pwsh --version
+      - name: Install Static Linux SDK
+        if: runner.os == 'Linux'
+        shell: pwsh
+        run: |
+          swift sdk install 'https://download.swift.org/swift-6.4.2-release/static-sdk/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE_static-linux-0.1.0.artifactbundle.tar.gz' --checksum '3786b179936d9cc9e266dd506bd1654176358d7b25288e243359f4d17cc4dc5a'
+          if ($LASTEXITCODE -ne 0) { throw 'Static SDK installation failed.' }
+      - run: npm ci
+      - name: Check frontend
+        run: npm run check && npm run lint
+      - name: Resolve and patch platform dependencies
+        shell: pwsh
+        run: |
+          swift package --package-path apps/api resolve --force-resolved-versions
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed' }
+          ./scripts/patch-swift-dependencies.ps1 -ScratchPath apps/api/.build
+      - name: Test backend
+        run: swift test --package-path apps/api -j 3
+      - name: Build embedded release
+        shell: pwsh
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: ./scripts/build-api.ps1 -Target $env:RELEASE_TARGET -Jobs 3
+      - name: Install HTTP contract checks
+        run: python3 -m venv .contract-env && .contract-env/bin/pip install -r scripts/requirements-contract.txt
+      - name: Verify contracts
+        run: .contract-env/bin/python scripts/test-contract.py
+      - name: Smoke native release and shutdown
+        if: matrix.target != 'linux-arm64'
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: .contract-env/bin/python scripts/api-shutdown-smoke.py --binary "dist/api/webdrop-$RELEASE_TARGET" --validate-contract
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: webdrop-${{ matrix.target }}
+          path: |
+            dist/api/webdrop-${{ matrix.target }}
+            dist/api/webdrop-${{ matrix.target }}.json
+          if-no-files-found: error
+          compression-level: 0
+
+  macos:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - target: macos-arm64
             runner: macos-15
           - target: macos-x86_64
@@ -185,9 +287,51 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  oci:
+    name: Verify and publish Linux OCI image
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: webdrop-linux-*
+          merge-multiple: true
+          path: dist/api
+      - name: Install Podman and schema validator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+          python3 -m venv .contract-env
+          .contract-env/bin/pip install -r scripts/requirements-contract.txt
+          chmod +x dist/api/webdrop-linux-*
+      - name: Build OCI architectures
+        run: |
+          podman manifest create localhost/webdrop:ci
+          podman build --format oci --platform linux/amd64 --manifest localhost/webdrop:ci --build-arg BINARY_NAME=webdrop-linux-x86_64 -t localhost/webdrop:check .
+          podman build --format oci --platform linux/arm64 --manifest localhost/webdrop:ci --build-arg BINARY_NAME=webdrop-linux-arm64 -t localhost/webdrop:arm64 .
+      - name: Smoke OCI runtime
+        run: .contract-env/bin/python scripts/container-smoke.py --image localhost/webdrop:check --validate-contract
+      - name: Publish GHCR manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | podman login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="sha-${GITHUB_SHA:0:12}"
+          podman manifest push --all localhost/webdrop:ci "docker://$image:$tag"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            podman manifest push --all localhost/webdrop:ci "docker://$image:$GITHUB_REF_NAME"
+            podman manifest push --all localhost/webdrop:ci "docker://$image:latest"
+          fi
+
   publish:
     name: Publish release assets
-    needs: [build, windows]
+    needs: [build, macos, windows, oci]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
