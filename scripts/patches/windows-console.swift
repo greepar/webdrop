@@ -9,7 +9,7 @@ internal enum WebDropWindowsConsole {
     private static let callbacks = NIOLockedValueBox<[UUID: @Sendable () -> Void]>([:])
     private static let registered = SetConsoleCtrlHandler(
         { event in
-            guard event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT else { return false }
+            guard event == DWORD(CTRL_C_EVENT) || event == DWORD(CTRL_BREAK_EVENT) else { return false }
             let pending = callbacks.withLockedValue { callbacks in
                 let pending = Array(callbacks.values)
                 callbacks.removeAll()
