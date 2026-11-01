@@ -108,3 +108,8 @@ if ($IsWindows) {
         Apply-CheckedPatch $serve '        box.signalSources = []' "        box.signalSources = []`n        #if os(Windows)`n        WebDropWindowsConsole.remove(box.windowsConsoleToken)`n        box.windowsConsoleToken = nil`n        #endif"
     }
 }
+
+if ($IsWindows) {
+    $websocket = Join-Path $ScratchPath 'checkouts/websocket-kit/Sources/WebSocketKit/WebSocketClient.swift'
+    Apply-CheckedPatch $websocket 'ChannelOptions.socket(SocketOptionLevel(IPPROTO_TCP), TCP_NODELAY)' 'ChannelOptions.socketOption(.tcp_nodelay)'
+}

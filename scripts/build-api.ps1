@@ -148,6 +148,7 @@ if (-not $SkipStrip -and -not $isWindowsTarget) {
 if ($isLinuxTarget) { Assert-StaticElf $artifact $Target }
 if ($isWindowsTarget) {
     $bundle = Join-Path $OutputDirectory $Target
+    if (Test-Path -LiteralPath $bundle) { Remove-Item -LiteralPath $bundle -Recurse -Force }
     $null = New-Item -ItemType Directory -Force -Path $bundle
     Copy-Item $binary (Join-Path $bundle 'webdrop.exe') -Force
     $targetInfo = (& swift -print-target-info | Out-String | ConvertFrom-Json)
@@ -155,6 +156,22 @@ if ($isWindowsTarget) {
     $runtimePaths = @($targetInfo.paths.runtimeLibraryPaths) + @((Split-Path (Get-Command swift).Source))
     # Windows SDK DLLs live in usr/bin, separate from the compiler and import libraries.
     if ($env:SDKROOT) { $runtimePaths += Join-Path $env:SDKROOT 'usr/bin' }
+    # Use Visual Studio's redistributable CRT, rather than assuming the user's
+    # Windows installation has the same developer runtime as a hosted runner.
+    $vswhere = if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe' } else { $null }
+    if ($vswhere -and (Test-Path -LiteralPath $vswhere)) {
+        $visualStudio = (& $vswhere -latest -products '*' -property installationPath | Select-Object -First 1)
+        if ($visualStudio) {
+            $redist = Join-Path $visualStudio 'VC/Redist/MSVC'
+            $crtArch = if ($Target -eq 'windows-arm64') { 'arm64' } else { 'x64' }
+            foreach ($version in Get-ChildItem $redist -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending) {
+                $architectureDirectory = Join-Path $version.FullName $crtArch
+                if (Test-Path $architectureDirectory) {
+                    $runtimePaths += @(Get-ChildItem $architectureDirectory -Directory -Filter 'Microsoft.VC*.CRT' | ForEach-Object { $_.FullName })
+                }
+            }
+        }
+    }
     $searchPaths = [Collections.Generic.List[string]]::new()
     foreach ($path in $runtimePaths) {
         $searchPaths.Add($path)

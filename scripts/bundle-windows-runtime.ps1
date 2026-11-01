@@ -86,7 +86,9 @@ while ($queue.Count) {
     foreach ($name in $image.Imports) {
         if ($index.ContainsKey($name)) {
             $queue.Enqueue($index[$name])
-        } elseif ($name -like 'api-ms-win-*' -or $name -like 'ext-ms-win-*') {
+        } elseif ($name -match '^(vcruntime|msvcp|concrt|vcomp)[0-9].*\.dll$') {
+            throw "Missing redistributable CRT $name; install the matching Visual Studio C++ tools."
+        } elseif ($name -like 'api-ms-win-*'  -or $name -like 'ext-ms-win-*') {
             continue # Windows API-set contracts are resolved by the OS loader.
         } elseif (-not $SystemDirectory -or -not (Test-Path -LiteralPath (Join-Path $SystemDirectory $name))) {
             throw "Missing runtime DLL $name required by $path"

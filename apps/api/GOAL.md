@@ -110,3 +110,6 @@
 - [x] 平台定向手动构建可独立重跑；显式checkout固定触发SHA。Windows目标要求匹配架构的原生runner，避免静默产生错误架构。
 
 - macOS兼容性调整：macOS15的52项测试及发布编译通过，但裸程序缺少Swift6.2新增并发协议ABI；等价默认方法补丁仍不能修复协议符号，已撤去旧系统补丁。单文件产物现明确要求macOS26，使用对应ARM64/Intel runner重新验收；不承诺macOS13–15兼容。Windows已越过NIOSSL，修正zlib在Windows上unsigned long为32位的问题，继续原生构建验收。
+
+- [x] run41305254162的macOS ARM64单文件（约23.3MB）已在macOS26通过52项测试、契约检查、真实SSE、SIGINT/SIGTERM及重启身份恢复。Intel尚在构建。run41305316717的Linux双架构及GHCR再次全部通过，发布sha-bf52cc33d2ae。
+- Windows继续修复WebSocketKit的Unix socket选项；添加原生Console中断处理避免未实现的Dispatch信号源，DLL按PE普通/延迟导入递归收集并验证架构/缺失依赖，额外收集对应架构VC++可再发行CRT。PE依赖链、延迟导入、架构错误与缺失DLL本机验证通过；原生Windows运行仍待CI。
