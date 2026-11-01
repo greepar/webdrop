@@ -30,19 +30,43 @@ jobs:
           - target: macos-x86_64
             runner: macos-15-intel
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.ref }}
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: npm
-      - name: Import Swift signing keys
-        if: runner.os == 'Linux'
-        run: curl --fail --location https://www.swift.org/keys/all-keys.asc | gpg --import
-      - uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3 (Swiftly)
-        with:
-          swift-version: '6.4.2'
+      - name: Install Swift with official Swiftly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SWIFTLY_HOME_DIR="$RUNNER_TEMP/swiftly-home"
+          export SWIFTLY_BIN_DIR="$RUNNER_TEMP/swiftly-bin"
+          mkdir -p "$SWIFTLY_HOME_DIR" "$SWIFTLY_BIN_DIR"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            sudo apt-get update
+            sudo apt-get install -y libcurl4-openssl-dev
+            curl -fLsS https://www.swift.org/keys/all-keys.asc | gpg --import
+            url="https://download.swift.org/swiftly/linux/swiftly-1.1.2-$(uname -m).tar.gz"
+            curl -fLsS "$url" -o "$RUNNER_TEMP/swiftly.tar.gz"
+            curl -fLsS "$url.sig" -o "$RUNNER_TEMP/swiftly.tar.gz.sig"
+            gpg --verify "$RUNNER_TEMP/swiftly.tar.gz.sig" "$RUNNER_TEMP/swiftly.tar.gz"
+            tar xzf "$RUNNER_TEMP/swiftly.tar.gz" -C "$SWIFTLY_BIN_DIR"
+          else
+            curl -fLsS https://download.swift.org/swiftly/darwin/swiftly.pkg -o "$RUNNER_TEMP/swiftly.pkg"
+            installer -pkg "$RUNNER_TEMP/swiftly.pkg" -target CurrentUserHomeDirectory
+            cp "$HOME/.swiftly/bin/swiftly" "$SWIFTLY_BIN_DIR/swiftly"
+          fi
+          export PATH="$SWIFTLY_BIN_DIR:$PATH"
+          swiftly init --skip-install --quiet-shell-followup --assume-yes --no-modify-profile
+          swiftly install --use 6.4.2 --assume-yes --post-install-file "$RUNNER_TEMP/swift-post-install.sh"
+          if [[ -f "$RUNNER_TEMP/swift-post-install.sh" ]]; then bash "$RUNNER_TEMP/swift-post-install.sh"; fi
+          echo "SWIFTLY_HOME_DIR=$SWIFTLY_HOME_DIR" >> "$GITHUB_ENV"
+          echo "SWIFTLY_BIN_DIR=$SWIFTLY_BIN_DIR" >> "$GITHUB_ENV"
+          echo "$SWIFTLY_BIN_DIR" >> "$GITHUB_PATH"
+          swiftly use --print-location >> "$GITHUB_PATH"
+          swift --version
       - name: Install Linux ICU subset tools
         if: runner.os == 'Linux'
         run: |
@@ -75,7 +99,7 @@ jobs:
         env:
           RELEASE_TARGET: ${{ matrix.target }}
         run: .contract-env/bin/python scripts/api-shutdown-smoke.py --binary "dist/api/webdrop-$RELEASE_TARGET" --validate-contract
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: webdrop-${{ matrix.target }}
           path: |
@@ -85,39 +109,50 @@ jobs:
           compression-level: 0
 
   windows:
-    name: Windows PowerShell and frontend
+    name: Build windows-x86_64
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: npm
-      - shell: pwsh
+      - name: Install Swift for Windows
         run: |
-          npm ci
-          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
-          npm run check
-          if ($LASTEXITCODE -ne 0) { throw 'Type check failed' }
-          npm run lint
-          if ($LASTEXITCODE -ne 0) { throw 'Lint failed' }
-          ./scripts/embed-web.ps1
-          $errorsFound = @()
-          Get-ChildItem scripts -Filter '*.ps1' | ForEach-Object {
-            $tokens = $null; $errors = $null
-            $null = [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
-            $errorsFound += $errors
+          $installer = Join-Path $env:RUNNER_TEMP 'swift-installer.exe'
+          Invoke-WebRequest 'https://download.swift.org/swift-6.4.2-release/windows10/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-windows10.exe' -OutFile $installer
+          $result = Start-Process $installer -ArgumentList '/quiet', '/norestart', '/log', "$env:RUNNER_TEMP/swift-install.log" -Wait -PassThru
+          if ($result.ExitCode -notin @(0, 3010)) { throw "Swift installation failed: $($result.ExitCode)" }
+          foreach ($scope in @('Machine', 'User')) {
+            foreach ($entry in [Environment]::GetEnvironmentVariables($scope).GetEnumerator()) {
+              if ($entry.Key -eq 'Path') { $env:Path += ";$($entry.Value)" }
+              else { [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process') }
+            }
           }
-          if ($errorsFound.Count) { throw ($errorsFound | Out-String) }
-          if (-not (Test-Path apps/api/Sources/WebdropAPI/Generated/EmbeddedWebAssets.generated.swift)) { throw 'Embedding failed' }
-          try {
-            ./scripts/build-api.ps1
-            throw 'Expected unsupported native Windows target to be rejected'
-          } catch {
-            if ($_.Exception.Message -notmatch 'Native Windows releases are not supported') { throw }
+          $env:Path.Split(';') | Select-Object -Unique | Add-Content $env:GITHUB_PATH
+          foreach ($entry in Get-ChildItem Env:) {
+            if ($entry.Name -ne 'Path' -and $entry.Name -match '^(SDKROOT|SWIFT.*|DEVELOPER_DIR|INCLUDE|LIB)$') { "$($entry.Name)=$($entry.Value)" | Add-Content $env:GITHUB_ENV }
           }
-          Write-Host 'Windows frontend, PowerShell parsing/embedding, and unsupported-target diagnostic passed.'
+          swift --version
+          if ($LASTEXITCODE -ne 0) { throw 'Swift is unavailable after installation' }
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Build Windows release
+        run: ./scripts/build-api.ps1 -Target windows-x86_64 -Jobs 3
+      - name: Smoke Windows release
+        run: python scripts/api-windows-smoke.py --binary dist/api/windows-x86_64/webdrop.exe
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: webdrop-windows-x86_64
+          path: |
+            dist/api/webdrop-windows-x86_64.zip
+            dist/api/webdrop-windows-x86_64.zip.json
+          if-no-files-found: error
+          compression-level: 0
 
   publish:
     name: Publish release assets
@@ -127,7 +162,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: webdrop-*
           merge-multiple: true

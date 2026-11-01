@@ -1,7 +1,9 @@
 import Foundation
 import Vapor
 
-#if canImport(Musl)
+#if os(Windows)
+import WinSDK
+#elseif canImport(Musl)
 import Musl
 #elseif canImport(Glibc)
 import Glibc
@@ -11,9 +13,31 @@ import Darwin
 
 // The descriptor is immutable; the lock is released only when its owner is deinitialized.
 final class StoreLock: @unchecked Sendable {
+    #if os(Windows)
+    let descriptor: HANDLE
+    #else
     let descriptor: Int32
+    #endif
 
     init(path: String) throws {
+        #if os(Windows)
+        let handle = path.withCString(encodedAs: UTF16.self) { pointer in
+            CreateFileW(
+                pointer,
+                DWORD(GENERIC_READ | GENERIC_WRITE),
+                0,
+                nil,
+                DWORD(OPEN_ALWAYS),
+                DWORD(FILE_ATTRIBUTE_NORMAL),
+                nil
+            )
+        }
+        guard let handle, handle != INVALID_HANDLE_VALUE else {
+            let code = GetLastError() == ERROR_SHARING_VIOLATION ? "STORAGE_LOCKED" : "STORAGE_ERROR"
+            throw APIError(500, code, "Cannot acquire the DATA_DIR process lock")
+        }
+        descriptor = handle
+        #else
         descriptor = open(path, O_CREAT | O_RDWR, 0o600)
         guard descriptor >= 0 else {
             throw APIError(500, "STORAGE_ERROR", "Cannot open storage lock")
@@ -22,11 +46,16 @@ final class StoreLock: @unchecked Sendable {
             close(descriptor)
             throw APIError(500, "STORAGE_LOCKED", "DATA_DIR is already in use")
         }
+        #endif
     }
 
     deinit {
+        #if os(Windows)
+        CloseHandle(descriptor)
+        #else
         flock(descriptor, LOCK_UN)
         close(descriptor)
+        #endif
     }
 }
 
