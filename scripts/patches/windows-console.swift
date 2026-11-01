@@ -1,18 +1,22 @@
 // libdispatch's Windows backend does not implement EVFILT_SIGNAL.
-// Console interrupts run on a Windows callback thread, so the promise callback
-// can safely use NIO's lock. Drain callbacks once to avoid double completion.
+// Windows invokes this callback on its own thread. Drain handlers once so
+// repeated interrupts cannot complete the shutdown promise twice.
 import Foundation
-import NIOConcurrencyHelpers
 import WinSDK
 
 internal enum WebDropWindowsConsole {
-    private static let callbacks = NIOLockedValueBox<[Foundation.UUID: @Sendable () -> Void]>([:])
+    private final class Handlers: @unchecked Sendable {
+        let lock = NSLock()
+        var callbacks: [Foundation.UUID: @Sendable () -> Void] = [:]
+    }
+
+    private static let handlers = Handlers()
     private static let registered = SetConsoleCtrlHandler(
         { event in
             guard event == DWORD(CTRL_C_EVENT) || event == DWORD(CTRL_BREAK_EVENT) else { return false }
-            let pending = callbacks.withLockedValue { callbacks in
-                let pending = Array(callbacks.values)
-                callbacks.removeAll()
+            let pending = handlers.lock.withLock {
+                let pending = Array(handlers.callbacks.values)
+                handlers.callbacks.removeAll()
                 return pending
             }
             for callback in pending { callback() }
@@ -26,11 +30,11 @@ internal enum WebDropWindowsConsole {
             throw NSError(domain: "WebDropWindowsConsole", code: Int(GetLastError()))
         }
         let id = Foundation.UUID()
-        callbacks.withLockedValue { $0[id] = callback }
+        handlers.lock.withLock { handlers.callbacks[id] = callback }
         return id
     }
 
     static func remove(_ id: Foundation.UUID?) {
-        if let id { _ = callbacks.withLockedValue { $0.removeValue(forKey: id) } }
+        if let id { _ = handlers.lock.withLock { handlers.callbacks.removeValue(forKey: id) } }
     }
 }
