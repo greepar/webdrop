@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Start the packaged Windows executable with only its adjacent runtime DLLs."""
 import argparse
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,12 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--binary', type=Path, required=True)
 args = parser.parse_args()
 binary = args.binary.resolve()
+# Hosted runners may launch Python without a console. Give the child a real
+# inherited console so CTRL_BREAK tests the native handler through Windows.
+kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+if kernel32.GetConsoleCP() == 0:
+    if not kernel32.AllocConsole():
+        raise ctypes.WinError(ctypes.get_last_error())
 with tempfile.TemporaryDirectory(prefix='webdrop-windows-') as temporary:
     work = Path(temporary)
     with socket.socket() as sock:
