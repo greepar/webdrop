@@ -314,10 +314,6 @@ jobs:
         with:
           path: apps/api/.build/package-${{ matrix.target }}
           key: ${{ steps.swift-cache.outputs.cache-primary-key }}
-      - name: Smoke Windows release
-        env:
-          RELEASE_TARGET: ${{ matrix.target }}
-        run: python scripts/api-windows-smoke.py --binary "dist/api/$env:RELEASE_TARGET/webdrop.exe"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: webdrop-${{ matrix.target }}
@@ -326,6 +322,34 @@ jobs:
             dist/api/webdrop-${{ matrix.target }}.zip.json
           if-no-files-found: error
           compression-level: 0
+
+  windows-smoke:
+    name: Run packaged ${{ matrix.target }}
+    needs: windows
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x86_64
+            runner: windows-2025
+          - target: windows-arm64
+            runner: windows-11-arm
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: webdrop-${{ matrix.target }}
+          path: release-assets
+      - name: Run release without installing Swift
+        shell: pwsh
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: |
+          Expand-Archive "release-assets/webdrop-$env:RELEASE_TARGET.zip" "dist/api/$env:RELEASE_TARGET"
+          python scripts/api-windows-smoke.py --binary "dist/api/$env:RELEASE_TARGET/webdrop.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaged runtime smoke failed' }
 
   oci:
     name: Verify and publish Linux OCI image
@@ -371,7 +395,7 @@ jobs:
 
   publish:
     name: Publish release assets
-    needs: [build, macos, windows, oci]
+    needs: [build, macos, windows, windows-smoke, oci]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
