@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import subprocess
 import sys
@@ -28,7 +29,8 @@ with tempfile.TemporaryDirectory(prefix='webdrop-windows-') as temporary:
     assert first.returncode == 0, (first.returncode, first.stdout, first.stderr)
     assert (work / '.env').is_file() and not (work / 'data').exists()
     with (work / 'server.log').open('w+') as log:
-        process = subprocess.Popen([str(binary)], cwd=work, env=environment, stdout=log, stderr=log)
+        process = subprocess.Popen([str(binary)], cwd=work, env=environment, stdout=log, stderr=log,
+                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
         try:
             origin = f'http://127.0.0.1:{port}'
             for _ in range(200):
@@ -53,6 +55,13 @@ with tempfile.TemporaryDirectory(prefix='webdrop-windows-') as temporary:
                     '--url', origin, '--file-bytes', str(size),
                 ], env=environment, check=True, timeout=120)
             print('PASS Windows packaged exe, first launch, frontend, permissions, SSE and memory/disk upload with isolated DLL PATH')
+            started = time.monotonic()
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+            assert process.wait(timeout=5) == 0, (work / 'server.log').read_text()
+            assert time.monotonic() - started < 5
+            assert 'Server stop took too long' not in (work / 'server.log').read_text()
+            print('PASS Windows native console interrupt exits cleanly')
         finally:
-            process.terminate()
-            process.wait(timeout=10)
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=10)
