@@ -12,13 +12,13 @@ $ErrorActionPreference = 'Stop'
 
 # PE32+ import and delay-import tables. Read them directly so packaging does not
 # depend on Visual Studio dumpbin or on a particular LLVM tool installation.
-function Read-PeImports([string]$Path) {
+function Read-PeImports([string]$Path, [switch]$HeadersOnly) {
     $bytes = [IO.File]::ReadAllBytes($Path)
     if ($bytes.Length -lt 64 -or [BitConverter]::ToUInt16($bytes, 0) -ne 0x5a4d) { throw "Not a PE image: $Path" }
     $pe = [BitConverter]::ToInt32($bytes, 60)
     if ($pe -lt 64 -or $pe + 264 -gt $bytes.Length -or [BitConverter]::ToUInt32($bytes, $pe) -ne 0x4550) { throw "Invalid PE header: $Path" }
     $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
-    if ($machine -notin @(0x8664, 0xaa64)) { return [pscustomobject]@{ Machine = $machine; Imports = @() } }
+    if ($HeadersOnly -or $machine -notin @(0x8664, 0xaa64)) { return [pscustomobject]@{ Machine = $machine; Imports = @() } }
     $count = [BitConverter]::ToUInt16($bytes, $pe + 6)
     $optional = $pe + 24
     if ([BitConverter]::ToUInt16($bytes, $optional) -ne 0x20b) { throw "Expected PE32+: $Path" }
@@ -70,7 +70,7 @@ foreach ($directory in $RuntimeDirectories) {
     if (-not $directory -or -not (Test-Path -LiteralPath $directory)) { continue }
     foreach ($file in Get-ChildItem -LiteralPath $directory -Filter '*.dll' -File -Recurse) {
         if ($index.ContainsKey($file.Name)) { continue }
-        if ((Read-PeImports $file.FullName).Machine -eq $expectedMachine) { $index.Add($file.Name, $file.FullName) }
+        if ((Read-PeImports $file.FullName -HeadersOnly).Machine -eq $expectedMachine) { $index.Add($file.Name, $file.FullName) }
     }
 }
 $null = New-Item -ItemType Directory -Path $Destination -Force
