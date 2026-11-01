@@ -1,5 +1,6 @@
 import { ThemeToggle } from '@/features/theme/ThemeToggle'
 import { RoomCodeInput } from '@/features/entry/RoomCodeInput'
+import { CreateRoomPanel, PasswordPrompt, PendingJoin } from '@/features/entry/JoinFlows'
 import { describePow, useEntry } from '@/features/entry/use-entry'
 import { DevMockBadge, Spinner, StatusLine, Button } from '@/shared/ui/primitives'
 import { BrandMark } from '@/shared/ui/Icon'
@@ -25,25 +26,47 @@ export function EntryPage() {
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">WebDrop</h1>
         </div>
 
-        <form
+        {entry.pending ? (
+          <PendingJoin
+            code={entry.code}
+            expiresAt={entry.pending.request.expiresAt}
+            onCancel={entry.cancelPending}
+          />
+        ) : (
+        <div
           className="anim-enter flex w-full flex-col items-center"
-          onSubmit={(event) => {
-            event.preventDefault()
-            entry.joinRoom()
-          }}
           style={{ animationDelay: '60ms' }}
         >
           <RoomCodeInput
             value={entry.code}
             length={entry.length}
             disabled={entry.busyNow || cooling}
-            error={inlineError}
+            error={entry.passwordRequired ? null : inlineError}
             hint={inlineHint}
             canCreate={entry.canCreate}
             onChange={entry.setCode}
-            onCreate={entry.createRoom}
+            onCreate={entry.openCreate}
             onRandom={entry.randomRoom}
           />
+          {entry.passwordRequired && (
+            <PasswordPrompt
+              disabled={entry.busyNow}
+              error={inlineError}
+              onSubmit={(password) => entry.joinRoom(password)}
+              onCancel={() => entry.setCode(entry.code)}
+            />
+          )}
+          {entry.createOpen && (
+            <CreateRoomPanel
+              disabled={entry.busyNow}
+              password={entry.createPassword}
+              approvalRequired={entry.createWithApproval}
+              onPassword={entry.setCreatePassword}
+              onApproval={entry.setCreateWithApproval}
+              onCreate={entry.createRoom}
+              onCancel={entry.cancelCreate}
+            />
+          )}
           <div className="mt-6 min-h-10">
             {entry.busyNow && (
               <div className="flex items-center justify-center gap-3 text-sm text-muted">
@@ -71,7 +94,8 @@ export function EntryPage() {
               </div>
             )}
           </div>
-        </form>
+        </div>
+        )}
       </main>
     </div>
   )

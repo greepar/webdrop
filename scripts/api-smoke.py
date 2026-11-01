@@ -92,6 +92,19 @@ owner.request('POST', request_path + '/approve', {})
 assert guest.request('GET', request_path)[2]['data']['status'] == 'approved'
 member = guest.room(room['code'], join=True, expected=200)['membership']
 try:
+    # Recover the same identity, without rejoining or bypassing the current password/approval settings.
+    recovered = owner.request('POST', '/api/v1/sessions', {})[2]['data']
+    assert recovered['deviceId'] == owner.request('GET', '/api/v1/session')[2]['data']['deviceId']
+    owner.request('DELETE', f'/api/v1/rooms/{rid}/members/me', expected=409)
+    guest.request('DELETE', f'/api/v1/rooms/{rid}', expected=403)
+    leaver = Client('Leaving member')
+    waiting = leaver.room(room['code'], join=True, password='private room 🔑', expected=202)
+    owner.request('POST', f'/api/v1/rooms/{rid}/join-requests/' + waiting['request']['id'] + '/approve', {})
+    leaver.request('DELETE', f'/api/v1/rooms/{rid}/members/me', expected=204)
+    assert leaver.request('GET', '/api/v1/session')[2]['data']['memberships'] == []
+    leaver.request('DELETE', f'/api/v1/rooms/{rid}/members/me', expected=404)
+    leaver.request('GET', f'/api/v1/rooms/{rid}', expected=404)
+    leaver.request('GET', f'/api/v1/rooms/{rid}/events', expected=404)
     guest.request('PATCH', f'/api/v1/rooms/{rid}', {'password':None}, expected=403)
     assert owner.request('PATCH', f'/api/v1/rooms/{rid}', {'password':'replacement'})[2]['data']['hasPassword'] is True
     assert owner.request('PATCH', f'/api/v1/rooms/{rid}', {'password':None})[2]['data']['hasPassword'] is False
@@ -138,10 +151,26 @@ try:
     assert 'event: heartbeat\n' in heartbeat, heartbeat
     validate_event('heartbeat', json.loads(next(line[6:] for line in heartbeat if line.startswith('data: '))))
     conn.close()
+    live = connection()
+    live.request('GET', f'/api/v1/rooms/{rid}/events', headers={'Cookie':owner.cookie})
+    stream = live.getresponse(); assert stream.status == 200
+    assert b'event: heartbeat' in b''.join(stream.readline() for _ in range(4))
     owner.request('DELETE', f'/api/v1/rooms/{rid}/members/{member["id"]}', expected=204)
     guest.request('GET', path, expected=404)
     guest.request('GET', f'/api/v1/rooms/{rid}/events', expected=404)
     owner.request('DELETE', f'/api/v1/rooms/{rid}', expected=204)
+    tail = stream.read().decode()
+    assert 'event: room.closed\n' in tail, tail
+    for frame in tail.split('\n\n'):
+        fields = frame.splitlines()
+        event = next((line[7:] for line in fields if line.startswith('event: ')), None)
+        data = next((line[6:] for line in fields if line.startswith('data: ')), None)
+        if event and data: validate_event(event, json.loads(data))
+    live.close()
+    assert owner.request('GET', '/api/v1/session')[2]['data']['memberships'] == []
+    assert guest.request('GET', '/api/v1/session')[2]['data']['memberships'] == []
+    owner.request('DELETE', f'/api/v1/rooms/{rid}', expected=404)
+    owner.request('GET', f'/api/v1/rooms/{rid}/events', expected=404)
     owner.request('GET', public_path, expected=410)
     print('PASS: owner approval, room passwords, sessions, CSRF, PoW, idempotency, room permissions, chat, streaming upload, SHA256, Range/HEAD, public links, SSE, kick and close revocation')
 except BaseException:

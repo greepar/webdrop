@@ -7,13 +7,15 @@ import {
   parseRoom,
   parseRoomItem,
   parseRoomSnapshot,
+  parseJoinRequest,
+  parseJoinRequestCreated,
   parseSession,
   parseShareLink,
   parseSharedAsset,
 } from '@/shared/api/schema'
 import { setCsrfToken } from '@/shared/api/session-token'
 import { asArray, asObject, asString, unwrapData, unwrapList } from '@/shared/api/validate'
-import type { Capabilities, Member, Membership, Proof, Room, RoomItem, RoomSnapshot, Session, ShareLink, SharedAsset } from '@/shared/types/domain'
+import type { Capabilities, JoinRequest, JoinRequestCreated, Member, Membership, Proof, Room, RoomItem, RoomSnapshot, Session, ShareLink, SharedAsset } from '@/shared/types/domain'
 
 export async function fetchCapabilities(signal?: AbortSignal): Promise<Capabilities> {
   return parseCapabilities(unwrapData(await request('/capabilities', { signal }), 'capabilities'))
@@ -39,16 +41,25 @@ export async function fetchSession(signal?: AbortSignal): Promise<Session> {
   return session
 }
 
-export async function createRoom(proof: Proof, code: string | null, idempotencyKey: string, signal?: AbortSignal): Promise<Membership> {
+export type CreateRoomOptions = { password?: string; approvalRequired?: boolean }
+
+export async function createRoom(proof: Proof, code: string | null, idempotencyKey: string, options: CreateRoomOptions = {}, signal?: AbortSignal): Promise<Membership> {
   const body: Record<string, unknown> = { proof }
   if (code !== null) body.code = code
+  if (options.password !== undefined) body.password = options.password
+  if (options.approvalRequired !== undefined) body.approvalRequired = options.approvalRequired
   const payload = await request('/rooms', { method: 'POST', body, idempotencyKey, signal })
   return parseMembership(unwrapData(payload, 'membership'))
 }
 
-export async function joinRoom(proof: Proof, code: string, idempotencyKey: string, signal?: AbortSignal) {
-  const payload = await request('/rooms/join', { method: 'POST', body: { code, proof }, idempotencyKey, signal })
-  return parseMembership(unwrapData(payload, 'membership'))
+// 201/200 returns a membership; 202 means an approval request is pending and the applicant has no
+// access to the room yet.
+export async function joinRoom(proof: Proof, code: string, idempotencyKey: string, password?: string, signal?: AbortSignal): Promise<Membership | JoinRequestCreated> {
+  const body: Record<string, unknown> = { code, proof }
+  if (password !== undefined) body.password = password
+  const payload = await request('/rooms/join', { method: 'POST', body, idempotencyKey, signal })
+  const data = asObject(unwrapData(payload, 'join'), 'join')
+  return 'request' in data ? parseJoinRequestCreated(data) : parseMembership(data)
 }
 
 export async function fetchRoomSnapshot(roomId: string, signal?: AbortSignal): Promise<RoomSnapshot> {
@@ -86,8 +97,32 @@ export async function closeRoom(roomId: string): Promise<void> {
   await request(`/rooms/${roomId}`, { method: 'DELETE' })
 }
 
+export type RoomSettingsPatch = {
+  joinPolicy?: 'open' | 'locked'
+  // undefined keeps the current password, null clears it.
+  password?: string | null
+  approvalRequired?: boolean
+}
+
+// Owner-only. Fields are applied atomically; at least one must be present.
+export async function updateRoomSettings(roomId: string, patch: RoomSettingsPatch): Promise<Room> {
+  return parseRoom(unwrapData(await request(`/rooms/${roomId}`, { method: 'PATCH', body: patch }), 'room'))
+}
+
 export async function setJoinPolicy(roomId: string, joinPolicy: 'open' | 'locked'): Promise<Room> {
-  return parseRoom(unwrapData(await request(`/rooms/${roomId}`, { method: 'PATCH', body: { joinPolicy } }), 'room'))
+  return updateRoomSettings(roomId, { joinPolicy })
+}
+
+export async function listJoinRequests(roomId: string, signal?: AbortSignal): Promise<JoinRequest[]> {
+  return asArray(unwrapData(await request(`/rooms/${roomId}/join-requests`, { signal }), 'joinRequests'), 'joinRequests', parseJoinRequest)
+}
+
+export async function getJoinRequest(roomId: string, requestId: string, signal?: AbortSignal): Promise<JoinRequest> {
+  return parseJoinRequest(unwrapData(await request(`/rooms/${roomId}/join-requests/${requestId}`, { signal }), 'joinRequest'))
+}
+
+export async function decideJoinRequest(roomId: string, requestId: string, decision: 'approve' | 'reject'): Promise<JoinRequest> {
+  return parseJoinRequest(unwrapData(await request(`/rooms/${roomId}/join-requests/${requestId}/${decision}`, { method: 'POST', body: {} }), 'joinRequest'))
 }
 
 export async function rotateRoomCode(roomId: string): Promise<Room> {

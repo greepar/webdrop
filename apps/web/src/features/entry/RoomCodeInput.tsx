@@ -96,8 +96,8 @@ export function RoomCodeInput({ value, length, disabled, error, hint, canCreate,
       return
     }
     if (event.key === 'Enter') {
+      // Joining is automatic once all boxes are filled; Enter only matters for the create offer.
       event.preventDefault()
-      if (digits.every(Boolean)) onCreate()
     }
   }
 

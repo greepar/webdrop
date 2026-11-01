@@ -91,6 +91,11 @@ extension Store {
             guard let room = state.rooms[id], room.members[s.id] != nil else { throw APIError(403, "MEMBERSHIP_REVOKED", "Membership revoked") }
             if room.closed == nil { _ = try member(id, s.id) }
             let latest = state.rooms[id]!
+            // Existing streams must receive the terminal event even if replay has
+            // overflowed. New subscriptions still fail member() after closure.
+            if latest.closed != nil {
+                return EventBatch(events: latest.events.filter { $0.type == "room.closed" }, cursor: latest.sequence, resync: false, closed: true)
+            }
             let after = cursor ?? latest.sequence
             if after > latest.sequence || after < (latest.events.first?.id ?? 1) - 1 {
                 return EventBatch(events: [], cursor: latest.sequence, resync: true, closed: latest.closed != nil)

@@ -30,11 +30,28 @@ export type Room = {
   createdAt: string
   joinPolicy: 'open' | 'locked'
   expiresAt: string | null
+  // Display-only: whether new members must supply a password. Never an authorization signal.
+  hasPassword: boolean
+  approvalRequired: boolean
 }
 
 export type RoomSnapshot = Room & { eventCursor: string }
 
 export type Membership = { room: Room; membership: Member }
+
+export type JoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'expired'
+
+export type JoinRequest = {
+  id: string
+  displayName: string
+  createdAt: string
+  expiresAt: string
+  status: JoinRequestStatus
+}
+
+// 202 from POST /rooms/join: a pending application, not a membership. The applicant cannot read the
+// room until it is approved.
+export type JoinRequestCreated = { roomId: string; request: JoinRequest }
 
 export type Session = {
   deviceId: string

@@ -80,6 +80,10 @@ actor Store {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
     }
     func transaction<T>(_ operation: () throws -> T) throws -> T {
+        // Expiry is independent of the requested operation: a later authorization
+        // failure must not resurrect a closed room or its resources.
+        sweep()
+        memoryFiles = memoryFiles.filter { ["uploaded", "ready"].contains(state.uploads[$0.key]?.status ?? "") }
         let before = state; let beforeMemory = memoryFiles; let beforeSubscriptions = subscriptions
         do {
             let result = try operation(); try persist()

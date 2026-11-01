@@ -95,7 +95,13 @@ export async function enterRoom(page, code = String(Math.floor(Math.random() * 9
     if (state.offer) break
     await sleep(100)
   }
+  // The offer opens the create panel; the panel's own button submits.
   await page.eval(() => document.querySelector('[data-create-room]')?.click())
+  for (let i = 0; i < 50; i++) {
+    if (await page.eval(() => [...document.querySelectorAll('button')].some(b => b.textContent.trim() === '创建'))) break
+    await sleep(100)
+  }
+  await page.eval(() => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '创建')?.click())
   for (let i = 0; i < 200; i++) {
     if (await page.eval(() => !!document.querySelector('textarea'))) return code
     await sleep(100)

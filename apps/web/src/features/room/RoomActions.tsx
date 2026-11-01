@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Dialog, IconButton, StatusLine } from '@/shared/ui/primitives'
 import { Icon } from '@/shared/ui/Icon'
-import { closeRoom, leaveRoom, removeMember, rotateRoomCode, setJoinPolicy } from '@/features/room/api'
+import { closeRoom, leaveRoom, removeMember, rotateRoomCode, setJoinPolicy, updateRoomSettings } from '@/features/room/api'
+import { JoinRequests } from '@/features/room/JoinRequests'
 import type { Member, Room } from '@/shared/types/domain'
 
 type Props = {
@@ -22,6 +23,10 @@ export function RoomActions({ room, members, selfMemberId, isOwner, onChanged, o
   const [confirm, setConfirm] = useState<null | { kind: 'close' | 'leave' | 'kick'; memberId?: string }>(null)
   // Direction of the in-dialog step change, so forward and back animate opposite ways.
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
+  // Password field is a draft until saved: empty means "leave the password as it is".
+  const [passwordDraft, setPasswordDraft] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [pendingCount, setPendingCount] = useState<number | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const owner = isOwner
 
@@ -75,6 +80,29 @@ export function RoomActions({ room, members, selfMemberId, isOwner, onChanged, o
   const closePanel = () => {
     setConfirm(null)
     setOpen(null)
+    setPasswordDraft('')
+    setPasswordError(null)
+  }
+
+  const passwordBytes = new TextEncoder().encode(passwordDraft).length
+
+  const savePassword = () => {
+    if (passwordBytes === 0 || passwordBytes > 72) return
+    void run(() => updateRoomSettings(room.id, { password: passwordDraft }), '房间密码已更新', () => {
+      setPasswordDraft('')
+      setPasswordError(null)
+    })
+  }
+
+  const clearPassword = () => {
+    void run(() => updateRoomSettings(room.id, { password: null }), '已取消房间密码', () => {
+      setPasswordDraft('')
+      setPasswordError(null)
+    })
+  }
+
+  const setApproval = (required: boolean) => {
+    void run(() => updateRoomSettings(room.id, { approvalRequired: required }), required ? '已开启入房审批' : '已关闭入房审批')
   }
   const backFromConfirm = () => {
     setDirection('back')
@@ -171,6 +199,67 @@ export function RoomActions({ room, members, selfMemberId, isOwner, onChanged, o
               ))}
             </div>
           </div>
+          <div>
+            <p className="text-sm font-medium">入房审批</p>
+            <p className="mt-1 text-xs leading-5 text-muted">开启后，新成员需要你同意才能进入。已在房间的成员不受影响。</p>
+            <div className="mt-3 flex gap-2">
+              {([false, true] as const).map((required) => (
+                <Button
+                  key={String(required)}
+                  variant={room.approvalRequired === required ? 'primary' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => setApproval(required)}
+                  className="flex-1"
+                  aria-pressed={room.approvalRequired === required}
+                >
+                  {required ? '需要同意' : '直接加入'}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium">房间密码</p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              {room.hasPassword ? '已设置密码。新成员加入时需要输入，已有成员不受影响。' : '还没有密码。设置后，新成员加入时需要输入。'}
+            </p>
+            <label htmlFor="room-password" className="sr-only">房间密码</label>
+            <input
+              id="room-password"
+              type="password"
+              autoComplete="new-password"
+              value={passwordDraft}
+              disabled={busy}
+              onChange={(event) => {
+                setPasswordDraft(event.target.value)
+                setPasswordError(passwordBytes > 72 ? '密码超过 72 字节' : null)
+              }}
+              placeholder={room.hasPassword ? '输入新密码以更换' : '设置密码'}
+              aria-describedby="room-password-hint"
+              className="sketch mt-3 min-h-11 w-full border border-line-strong bg-raised px-3 text-[16px] text-ink outline-none transition-[border-color,box-shadow] duration-150 focus:border-accent focus:shadow-[0_0_0_3px_var(--c-accent-soft)] disabled:opacity-50"
+            />
+            <p id="room-password-hint" className={`mt-1 text-xs ${passwordError ? 'text-danger' : 'text-muted'}`}>
+              {passwordError ?? '1–72 字节，空格和大小写都算数'}
+            </p>
+            <div className="mt-2 flex gap-2">
+              <Button variant="secondary" disabled={busy || passwordBytes === 0 || passwordBytes > 72} onClick={savePassword} className="flex-1">
+                {room.hasPassword ? '更换密码' : '设置密码'}
+              </Button>
+              {room.hasPassword && (
+                <Button variant="ghost" disabled={busy} onClick={clearPassword} className="text-danger">取消密码</Button>
+              )}
+            </div>
+          </div>
+          {room.approvalRequired && (
+            <div className="border-t border-line pt-5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">入房申请</p>
+                {pendingCount !== null && pendingCount > 0 && (
+                  <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs text-ink">{pendingCount} 条待处理</span>
+                )}
+              </div>
+              <div className="mt-3"><JoinRequests roomId={room.id} onCount={setPendingCount} /></div>
+            </div>
+          )}
           <div>
             <p className="text-sm font-medium">更换房间号</p>
             <p className="mt-1 text-xs leading-5 text-muted">原房间号会立即失效。</p>

@@ -32,3 +32,5 @@
 [房间密码接入契约](room-password.md)（0.4.0）：可选 password、owner 设置/修改/取消、hasPassword 和错误/重试语义。
 
 [房主审批接入契约](room-approval.md)（0.5.0）：approvalRequired 设置、202待审批响应、房主决定与访客轮询。当前正式 OpenAPI 版本为0.5.0。
+
+[房间生命周期补充契约](room-lifecycle.md)：返回与主动离房的区分、owner 关闭限制、会话恢复、离线回收、失效成员关系及失败/多标签页收敛；复用0.5.0接口，两端需按验收项核对补齐。

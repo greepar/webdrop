@@ -1,5 +1,7 @@
 import type {
   Asset,
+  JoinRequest,
+  JoinRequestCreated,
   Capabilities,
   Challenge,
   Member,
@@ -13,6 +15,7 @@ import type {
 } from '@/shared/types/domain'
 import {
   asArray,
+  asBoolean,
   asNullableString,
   asNumber,
   asObject,
@@ -46,6 +49,8 @@ export function parseRoom(value: unknown): Room {
     createdAt: asString(o.createdAt, 'room.createdAt'),
     joinPolicy: asOneOf(o.joinPolicy, ['open', 'locked'], 'room.joinPolicy'),
     expiresAt: asNullableString(o.expiresAt, 'room.expiresAt'),
+    hasPassword: asBoolean(o.hasPassword, 'room.hasPassword'),
+    approvalRequired: asBoolean(o.approvalRequired, 'room.approvalRequired'),
   }
 }
 
@@ -63,6 +68,25 @@ export function parseMember(value: unknown): Member {
     role: asOneOf(o.role, roles, 'member.role'),
     joinedAt: asString(o.joinedAt, 'member.joinedAt'),
     presence: asOneOf(o.presence, ['online', 'offline'], 'member.presence'),
+  }
+}
+
+export function parseJoinRequest(value: unknown): JoinRequest {
+  const o = asObject(value, 'joinRequest')
+  return {
+    id: asString(o.id, 'joinRequest.id'),
+    displayName: asString(o.displayName, 'joinRequest.displayName'),
+    createdAt: asString(o.createdAt, 'joinRequest.createdAt'),
+    expiresAt: asString(o.expiresAt, 'joinRequest.expiresAt'),
+    status: asOneOf(o.status, ['pending', 'approved', 'rejected', 'expired'] as const, 'joinRequest.status'),
+  }
+}
+
+export function parseJoinRequestCreated(value: unknown): JoinRequestCreated {
+  const o = asObject(value, 'joinRequestCreated')
+  return {
+    roomId: asString(o.roomId, 'joinRequestCreated.roomId'),
+    request: parseJoinRequest(o.request),
   }
 }
 

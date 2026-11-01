@@ -50,6 +50,8 @@ JSON 成功为 `{data: ...}`；列表附 `{page: {nextCursor}}`。健康接口�
 - 房间内历史保留至删除或房间关闭；新成员可见全部未删除内容。创建者可以管理全部内容，成员只能删除自己的内容。
 - 单房最多 1,000 条内容；文字每条 32 KiB、单房文字总额 1 MB、全局文字 16 MB。未处理未知字段会返回 400。
 
+返回、主动离房、关闭、恢复与多标签页的完整语义及验收要求见 [房间生命周期补充契约](room-lifecycle.md)。
+
 ## 消息分页与 SSE
 
 消息列表按服务端事件顺序从新到旧，cursor 为上一页最后一个 item ID；cursor 被删除时返回 CURSOR_INVALID，客户端重新加载。成员、链接按 ID 排序分页。默认 30 条，最多 100 条。
@@ -72,7 +74,7 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 
 业务 Event 的 type/data 由 OpenAPI oneOf 严格关联；SSE 的 event 名必须等于信封 type。heartbeat 和 resync.required 不使用业务信封，均为严格的 `{eventCursor: string}`，映射见 `x-sse-events`。
 
-每 2 秒（capabilities.heartbeatSeconds）发送 `heartbeat`，data 为 `{eventCursor}`；最多连接 120 秒后正常结束，由 EventSource 重连。每设备最多 3 条订阅，全局最多 200 条。被踢、会话过期会结束现有流，重连再次鉴权。房间关闭先发关闭事件再结束。发送背压由网络写入处理，事件不会无限缓存在每个订阅中。
+每 2 秒（capabilities.heartbeatSeconds）发送 `heartbeat`，data 为 `{eventCursor}`；最多连接 120 秒后正常结束，由 EventSource 重连。每设备最多 3 条订阅，全局最多 200 条。被踢、会话过期会结束现有流，重连再次鉴权。房间关闭先发关闭事件再结束；对已有连接，即使游标已失效也优先发送 room.closed，不发送 resync.required。新订阅仍按当前权限拒绝。发送背压由网络写入处理，事件不会无限缓存在每个订阅中。
 
 ## 临时内存与磁盘存储
 
@@ -122,3 +124,5 @@ SSE：`GET /api/v1/rooms/{roomId}/events?cursor=C`。Last-Event-ID 优先于 que
 ## 房主审批
 
 可选 approvalRequired 设置与密码独立。开启后，新成员通过密码与PoW校验后返回202申请状态，房主批准后才获得成员权限。接口、轮询与生命周期见 [room-approval.md](room-approval.md)。
+
+最后一个在线成员主动离开后，全员离线计时从离开时刻开始；GET session不刷新房间租约，到期清理在后续请求失败时仍提交。详见room-lifecycle.md。

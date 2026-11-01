@@ -18,6 +18,9 @@ type MockRoom = {
   ownerMemberId: string
   createdAt: string
   joinPolicy: 'open' | 'locked'
+  password: string | null
+  approvalRequired: boolean
+  joinRequests: Array<{ id: string; displayName: string; createdAt: string; expiresAt: string; status: 'pending' | 'approved' | 'rejected' | 'expired'; deviceId: string }>
   expiresAt: null
   members: MockMember[]
   items: MockItem[]
@@ -76,7 +79,7 @@ function requireMember(roomId: string) {
 }
 
 function roomDto(room: MockRoom) {
-  return { id: room.id, code: room.code, ownerMemberId: room.ownerMemberId, createdAt: room.createdAt, joinPolicy: room.joinPolicy, expiresAt: room.expiresAt }
+  return { id: room.id, code: room.code, ownerMemberId: room.ownerMemberId, createdAt: room.createdAt, joinPolicy: room.joinPolicy, expiresAt: room.expiresAt, hasPassword: room.password !== null, approvalRequired: room.approvalRequired }
 }
 
 function memberDto(member: MockMember) {
@@ -111,7 +114,7 @@ function ok<T>(data: T, status = 200) {
   return { status, body: { data } }
 }
 
-function createRoom(code: string, ownerDevice: string): MockRoom {
+function createRoom(code: string, ownerDevice: string, options: { password?: string | null; approvalRequired?: boolean } = {}): MockRoom {
   if (state.byCode.has(code)) fail(409, 'CODE_TAKEN', '这个房间号已被占用，请换一个')
   const id = crypto.randomUUID()
   const memberId = crypto.randomUUID()
@@ -121,6 +124,9 @@ function createRoom(code: string, ownerDevice: string): MockRoom {
     ownerMemberId: memberId,
     createdAt: now(),
     joinPolicy: 'open',
+    password: options.password ?? null,
+    approvalRequired: options.approvalRequired ?? false,
+    joinRequests: [],
     expiresAt: null,
     members: [{ id: memberId, deviceId: ownerDevice, displayName: state.displayName, role: 'owner', joinedAt: now() }],
     items: [],
@@ -190,7 +196,7 @@ async function route(path: string, method: string, body: unknown, options: Reque
     const code = typeof b.code === 'string' ? b.code : randomCode(4)
     if (!/^\d{4}$/.test(code)) fail(400, 'VALIDATION_FAILED', '房间号需要 4 位数字')
     await verifyProof(b as { code?: unknown; proof?: unknown }, 'room.create', String(options.idempotencyKey))
-    const room = createRoom(code, state.deviceId)
+    const room = createRoom(code, state.deviceId, { password: typeof b.password === 'string' ? b.password : null, approvalRequired: b.approvalRequired === true })
     return ok({ room: roomDto(room), membership: memberDto(room.members[0]!) }, 201)
   }
 
@@ -202,7 +208,21 @@ async function route(path: string, method: string, body: unknown, options: Reque
     const roomId = state.byCode.get(code)
     const room = roomId ? state.rooms.get(roomId) : undefined
     if (!room || room.joinPolicy === 'locked') fail(404, 'ROOM_UNAVAILABLE', '房间不存在或不可加入')
+    if (room.password !== null && b.password !== room.password) fail(403, 'ROOM_PASSWORD_INVALID', '密码缺失或不正确')
     let member = myMember(room)
+    if (!member && room.approvalRequired) {
+      const existing = room.joinRequests.find((r) => r.deviceId === state.deviceId && r.status === 'pending')
+      const request = existing ?? {
+        id: crypto.randomUUID(),
+        displayName: state.displayName,
+        createdAt: now(),
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+        status: 'pending' as const,
+        deviceId: state.deviceId,
+      }
+      if (!existing) room.joinRequests.push(request)
+      return { status: 202, body: { data: { roomId: room.id, request: { id: request.id, displayName: request.displayName, createdAt: request.createdAt, expiresAt: request.expiresAt, status: request.status } } } }
+    }
     if (!member) {
       if (room.members.length >= CAPABILITIES.maxDevices) fail(409, 'ROOM_FULL', '房间设备数已满')
       member = { id: crypto.randomUUID(), deviceId: state.deviceId, displayName: state.displayName, role: 'member', joinedAt: now() }
@@ -290,9 +310,18 @@ async function route(path: string, method: string, body: unknown, options: Reque
 
     if (method === 'PATCH' && rest === '') {
       if (!isOwner) fail(403, 'FORBIDDEN', '只有房主可以修改设置')
-      const joinPolicy = b.joinPolicy
-      if (joinPolicy !== 'open' && joinPolicy !== 'locked') fail(400, 'VALIDATION_FAILED', '设置无效')
-      room.joinPolicy = joinPolicy
+      if (b.joinPolicy !== undefined) {
+        if (b.joinPolicy !== 'open' && b.joinPolicy !== 'locked') fail(400, 'INVALID_INPUT', '设置无效')
+        room.joinPolicy = b.joinPolicy
+      }
+      if (b.password !== undefined) {
+        if (b.password !== null && (typeof b.password !== 'string' || b.password.length === 0 || b.password.includes('\u0000'))) fail(400, 'INVALID_INPUT', '密码不合法')
+        room.password = b.password as string | null
+      }
+      if (b.approvalRequired !== undefined) {
+        if (typeof b.approvalRequired !== 'boolean') fail(400, 'INVALID_INPUT', '设置无效')
+        room.approvalRequired = b.approvalRequired
+      }
       return ok(roomDto(room))
     }
 
@@ -342,6 +371,37 @@ async function route(path: string, method: string, body: unknown, options: Reque
   if (method === 'DELETE' && uploadDeleteMatch) {
     state.uploads.delete(uploadDeleteMatch[1]!)
     return { status: 204, body: undefined }
+  }
+
+  const joinReqMatch = /^\/rooms\/([^/]+)\/join-requests(?:\/([^/]+))?(?:\/(approve|reject))?$/.exec(p)
+  if (joinReqMatch) {
+    const [, roomId, requestId, decision] = joinReqMatch
+    const room = state.rooms.get(roomId!)
+    if (!room) fail(404, 'NOT_FOUND', '房间不存在')
+    const membership = myMember(room)
+    const owner = membership?.role === 'owner'
+    if (!requestId) {
+      if (method !== 'GET' || !owner) fail(403, 'OWNER_REQUIRED', '只有房主可以查看申请')
+      return ok(room.joinRequests.filter((r) => r.status === 'pending').map(({ id, displayName, createdAt, expiresAt, status }) => ({ id, displayName, createdAt, expiresAt, status })))
+    }
+    const request = room.joinRequests.find((r) => r.id === requestId)
+    if (!request) fail(404, 'NOT_FOUND', '申请不存在')
+    if (!owner && request.deviceId !== state.deviceId) fail(404, 'NOT_FOUND', '申请不存在')
+    if (decision) {
+      if (!owner) fail(403, 'OWNER_REQUIRED', '只有房主可以处理申请')
+      if (request.status !== 'pending') fail(409, 'JOIN_REQUEST_STATE', '申请已结束')
+      if (decision === 'approve') {
+        if (room.members.length >= CAPABILITIES.maxDevices) fail(409, 'ROOM_FULL', '房间已满')
+        request.status = 'approved'
+        if (!room.members.some((m) => m.deviceId === request.deviceId)) {
+          room.members.push({ id: crypto.randomUUID(), deviceId: request.deviceId, displayName: request.displayName, role: 'member', joinedAt: now() })
+        }
+      } else {
+        request.status = 'rejected'
+      }
+      return ok({ id: request.id, displayName: request.displayName, createdAt: request.createdAt, expiresAt: request.expiresAt, status: request.status })
+    }
+    return ok({ id: request.id, displayName: request.displayName, createdAt: request.createdAt, expiresAt: request.expiresAt, status: request.status })
   }
 
   const assetLinkMatch = /^\/assets\/([^/]+)\/links$/.exec(p)

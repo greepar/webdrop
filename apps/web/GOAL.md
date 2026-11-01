@@ -160,6 +160,41 @@ iOS 实机当前未验证；桌面手机视口模拟不能替代此项。无法�
 **检查命令**
 `npm run check`、`npm run lint`、`npm run build:web`；浏览器检查经 `python3 apps/web/tests/isolated.py <脚本>`。
 
+## 房间密码与入房审批（0.4.0 / 0.5.0）
+
+契约依据：`packages/contracts/room-password.md`、`room-approval.md`、`openapi.yaml` 0.5.0、`errors.md`。
+
+| 契约要求 | UI 入口与状态 | API / 事件 |
+| --- | --- | --- |
+| 可选密码，1–72 UTF-8 字节，不 trim | 创建面板可选填；房主在“房间设置”设置/更换/取消 | `POST /rooms`、`PATCH /rooms/{id}` 的 `password` |
+| 加入需密码，缺失或错误 403 | 加入失败后就地出现密码框，重新申请挑战与新幂等键 | `POST /rooms/join` 带 `password` |
+| 审批开启时 202 + request | 首页切到“等待房主同意”，显示房间号与有效期，3 秒轮询、页面隐藏暂停 | `POST /rooms/join` → 202；`GET .../join-requests/{id}` |
+| 房主审批 | “房间设置 → 入房申请”列表，同意/拒绝，显示待处理数 | `GET .../join-requests`、`approve`、`reject` |
+| `hasPassword` / `approvalRequired` | 设置面板与创建选项；`room.updated` 刷新 | Room/RoomSnapshot 字段 |
+| 状态冲突 | 409 `JOIN_REQUEST_STATE` 刷新、409 `ROOM_FULL` 保留申请、429 `JOIN_REQUEST_LIMIT`/`RATE_LIMITED` 按 `Retry-After` | `errors.md` |
+
+实现要点：
+
+- 密码只存在于提交表单的组件状态与请求体，不写 URL、localStorage、日志；`ROOM_PASSWORD_INVALID` 后不复用旧证明或旧幂等键。
+- 202 不是入房成功：等待期间不请求快照、成员、内容或 SSE；批准后由状态轮询触发进入，访问权仍以房间 API 鉴权为准。
+- 审批列表与申请状态均 3 秒轮询、页面隐藏暂停、429 按 `Retry-After` 退避；契约未新增申请类 SSE 事件。
+- 申请者可取消等待（仅停止本地轮询）；拒绝/过期/404 回到表单并给出简短说明。
+- 已有成员重连不要求密码；锁定优先于密码与审批（实测锁定房间不产生申请）。
+
+验证（隔离真实 API，未使用 mock）：
+
+- `approval-password.mjs`：房主创建带密码+审批 → 设置显示两项状态 → 访客错密码 403 且不进入 → 正确密码进入等待且无输入区 → 房主同意 → 访客自动进入同一房间。
+- `approval-cases.mjs`：拒绝送达申请者、申请者取消、关闭审批后直接加入、锁定房间不产生申请。
+- `approval-visual.mjs`：密码框、等待页、设置面板的标签与尺寸、无横向溢出、暗色与减少动态效果（等待页仅淡入、`aria-live` 存在）。
+- `live-smoke.mjs` 五项与 `page-matrix.mjs` 十组回归通过；`npm run check`、`npm run lint`、`npm run build:web` 通过。
+
+尚待联调/验证：
+
+- 审批与密码在真实服务上的 429/409 分支只按契约实现，未逐条注入验证。
+- 密码修改 5 次/10 分钟限流的界面反馈未专项测试。
+- 申请状态轮询的长时间后台恢复、多标签同时审批的并发冲突未专项验证。
+- iOS 实机：密码输入聚焦、等待页后台恢复、软键盘遮挡仍待真机验收。
+
 ## 进度与交付规则
 
 - 只有满足对应验收条件才勾选；“已有代码”“mock 通过”“真实接口通过”“实机通过”分别记录。

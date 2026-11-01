@@ -42,11 +42,11 @@ Room 建议字段：id、code、joinPolicy（open/locked）、createdAt、expire
 | GET `/rooms/:roomId/members` | 成员及在线状态 | 当前成员 |
 | PATCH `/rooms/:roomId` | 锁定/恢复加入等明确允许的设置 | owner |
 | POST `/rooms/:roomId/code/rotate` | 更换房间号，原号失效 | owner，受限流保护 |
-| DELETE `/rooms/:roomId/members/me` | 离开房间 | 当前成员；owner 离开策略待定 |
+| DELETE `/rooms/:roomId/members/me` | 离开房间 | 普通成员；owner 返回409 OWNER_MUST_CLOSE，需关闭房间 |
 | DELETE `/rooms/:roomId/members/:memberId` | 踢出并撤销该成员房间权限 | owner；不能通过此接口删除自己 |
 | DELETE `/rooms/:roomId` | 关闭房间、撤销成员访问及通知连接 | owner |
 
-无公开房间列表。踢出不能仅断开界面：后续 HTTP 和实时订阅都必须拒绝。匿名用户能否再次加入、owner 离线/清除 Cookie 后如何恢复，作为待决产品规则，不承诺可靠的匿名设备永久封禁。
+无公开房间列表。踢出不能仅断开界面：后续 HTTP 和实时订阅都必须拒绝。主动离房后按当前规则重新加入；被踢会话不能再次加入。owner 暂时离线保留房间，清除 Cookie 不提供所有权恢复，其他成员不自动接管。完整规则见 [房间生命周期补充契约](room-lifecycle.md)，不承诺可靠的匿名设备永久封禁。
 
 ## 内容与上传
 
@@ -93,4 +93,4 @@ ShareLink：id、assetId、slug、expiresAt、revokedAt、shareUrl、contentUrl�
 
 已确认：随机按钮直接创建随机码房间，加号按输入号码创建；新成员可见未过期历史；成员管理自身内容/分享，owner 管理全部；owner 暂时离线不关房，无人在线持续 30 分钟后关闭；最多 10 台设备；单文件 100 MB（100,000,000 字节）；分享默认 24 小时，关闭房间同时撤销。服务端原子处理号码冲突、入房人数和重复设备重连。
 
-尚待明确的实现细节：owner 主动离房或丢失凭证后的处理、内容独立保留期、媒体类型白名单、SSE 游标保留窗口及 PoW 参数。这些未决细节不改变上述已确认规则。本轮只完善规范，尚未开始业务实现。
+owner 主动离房须先关闭房间、丢失凭证不恢复所有权，已由正式协议明确。尚待明确的实现细节：内容独立保留期、媒体类型白名单、SSE 游标保留窗口及 PoW 参数。这些未决细节不改变上述已确认规则。本轮只完善规范，尚未开始业务实现。

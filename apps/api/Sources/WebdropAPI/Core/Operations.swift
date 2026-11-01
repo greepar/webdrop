@@ -76,6 +76,9 @@ extension Store {
             }
             guard path.count >= 4, var request = room.joinRequests?[path[3]], owner || request.device == s.id else { throw APIError(404, "NOT_FOUND", "Request not found") }
             if method == "GET", path.count == 4 {
+                // Only actual members refresh presence; pending applicants cannot
+                // keep an otherwise abandoned room alive by polling.
+                if room.members[s.id] != nil { _ = try member(room.id, s.id) }
                 if request.status == "pending" && request.expires <= now { request.status = "expired" }
                 return dataResponse(request.json)
             }
@@ -155,6 +158,10 @@ extension Store {
                 }
                 guard target.role != "owner" else { throw APIError(409, "OWNER_MUST_CLOSE", "Close the room before leaving") }
                 state.rooms[id]?.members.removeValue(forKey: target.device)
+                // A departing online member kept the room active until this moment.
+                if state.rooms[id]!.members.values.allSatisfy({ now - $0.seen >= settings.leaseSeconds }) {
+                    state.rooms[id]?.idleSince = now
+                }
                 if path[3] != "me" { state.rooms[id]?.banned.insert(target.device) }
                 emit(id, "member.left", .object(["id": str(target.id)]))
                 return WireResponse(status: 204)

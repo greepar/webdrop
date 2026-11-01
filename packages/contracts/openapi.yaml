@@ -535,7 +535,7 @@
       "get": {
         "operationId": "getSession",
         "summary": "getSession",
-        "description": "",
+        "description": "Returns only active memberships after server expiry checks; reading session does not refresh room presence. See room-lifecycle.md.",
         "security": [
           {
             "sessionCookie": []
@@ -1446,6 +1446,36 @@
             "x-error-codes": [
               "CODE_CAPACITY"
             ]
+          },
+          "404": {
+            "description": "NOT_FOUND. See errors.md for client recovery.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "properties": {
+                        "error": {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "NOT_FOUND"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "x-error-codes": [
+              "NOT_FOUND"
+            ]
           }
         },
         "requestBody": {
@@ -1660,7 +1690,7 @@
             ]
           },
           "404": {
-            "description": "ROOM_UNAVAILABLE. See errors.md for client recovery.",
+            "description": "ROOM_UNAVAILABLE for a fresh join; NOT_FOUND when replaying a success after membership revocation or closure.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1674,6 +1704,7 @@
                           "properties": {
                             "code": {
                               "enum": [
+                                "NOT_FOUND",
                                 "ROOM_UNAVAILABLE"
                               ]
                             }
@@ -1686,6 +1717,7 @@
               }
             },
             "x-error-codes": [
+              "NOT_FOUND",
               "ROOM_UNAVAILABLE"
             ]
           },
@@ -2520,7 +2552,7 @@
       "delete": {
         "operationId": "closeRoom",
         "summary": "closeRoom",
-        "description": "Owner only. Revokes all associated public links.",
+        "description": "Owner only. Revokes access, shares and resources. Existing SSE streams receive room.closed; repeats may return404. See room-lifecycle.md.",
         "security": [
           {
             "sessionCookie": []
@@ -9236,7 +9268,7 @@
       "get": {
         "operationId": "subscribeRoomEvents",
         "summary": "subscribeRoomEvents",
-        "description": "SSE, 2s heartbeat, 120s connection lifetime then reconnect. See protocol.md.",
+        "description": "SSE, 2s heartbeat, 120s lifetime. Reconnect always checks membership; existing streams prioritize room.closed over resync on closure. See room-lifecycle.md.",
         "security": [
           {
             "sessionCookie": []
