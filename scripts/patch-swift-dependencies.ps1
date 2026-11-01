@@ -125,6 +125,8 @@ if ($IsWindows) {
 }
 
 if ($IsWindows) {
+    $compression = Join-Path $ScratchPath 'checkouts/swift-nio-extras/Sources/NIOHTTPCompression/HTTPCompression.swift'
+    Apply-CheckedPatch $compression 'cnioextras_z_deflateBound(stream, UInt(inputBuffer.readableBytes))' 'cnioextras_z_deflateBound(stream, cnioextras_z_uLong(inputBuffer.readableBytes))'
     $pool = Join-Path $ScratchPath 'checkouts/async-http-client/Sources/AsyncHTTPClient/ConnectionPool.swift'
     Apply-CheckedPatch $pool "import Glibc`n#else`n#error" "import Glibc`n#elseif os(Windows)`nimport WinSDK`n#else`n#error"
     $vapor = Join-Path $ScratchPath 'checkouts/vapor/Sources/Vapor'
