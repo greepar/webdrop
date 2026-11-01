@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {Browser,sleep} from './browser.mjs';
+const browser=await Browser.launch();
+const wait=async(p,fn)=>{for(let i=0;i<100;i++){if(await p.eval(fn))return;await sleep(200)}throw Error('Condition timed out: '+await p.eval(()=>document.body.innerText))};
+try{
+const p=await browser.newPage();await p.send('Network.enable');browser.on(p.sessionId,'Network.responseReceived',e=>{if(e.response.status>=400)console.log('HTTP',e.response.status,new URL(e.response.url).pathname)});await p.goto((process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5188'));await p.eval(()=>document.querySelector('[aria-label="随机创建房间"]').click());await wait(p,()=>!!document.querySelector('textarea'));
+let dropped=false;
+await p.send('Fetch.enable',{patterns:[{urlPattern:'*/uploads/*/complete',requestStage:'Response'}]});
+const offComplete=browser.on(p.sessionId,'Fetch.requestPaused',async e=>{if(!dropped){dropped=true;await p.send('Fetch.failRequest',{requestId:e.requestId,errorReason:'ConnectionReset'})}else await p.send('Fetch.continueRequest',{requestId:e.requestId})});
+await p.eval(()=>{const f=document.querySelector('input[type=file]'),d=new DataTransfer();d.items.add(new File(['recover bytes'],'recover.txt',{type:'text/plain'}));f.files=d.files;f.dispatchEvent(new Event('change',{bubbles:true}))});
+await wait(p,()=>!!document.querySelector('[aria-label="上传队列"]')?.innerText.includes('上传未完成'));
+await p.eval(()=>[...document.querySelectorAll('[aria-label="上传队列"] button')].find(e=>e.textContent.trim()==='重试').click());
+await wait(p,()=>!document.querySelector('[aria-label="上传队列"]'));
+assert.equal(await p.eval(()=>document.querySelectorAll('[role=log] article').length),1);
+console.log('PASS complete response dropped, retry resolves once with one file message');
+await p.send('Fetch.disable');
+offComplete();
+let held;
+let cancelResponse;
+await p.send('Fetch.enable',{patterns:[{urlPattern:'*/uploads/*/content',requestStage:'Request'},{urlPattern:'*/uploads/*',requestStage:'Response'}]});
+const off=browser.on(p.sessionId,'Fetch.requestPaused',async e=>{
+ if(e.request.method==='PUT'&&!e.responseStatusCode)held=e.requestId;
+ else if(e.request.method==='DELETE'&&e.responseStatusCode)cancelResponse=e.requestId;
+ else await p.send('Fetch.continueRequest',{requestId:e.requestId});
+});
+await p.eval(()=>{const f=document.querySelector('input[type=file]'),d=new DataTransfer();d.items.add(new File(['cancel bytes'],'cancel.txt',{type:'text/plain'}));f.files=d.files;f.dispatchEvent(new Event('change',{bubbles:true}))});
+for(let i=0;i<100&&!held;i++)await sleep(100);
+assert.ok(held);
+await p.eval(()=>[...document.querySelectorAll('[aria-label="上传队列"] button')].find(e=>e.textContent.trim()==='取消').click());
+await wait(p,()=>document.querySelector('[aria-label="上传队列"]')?.innerText.includes('正在取消'));
+for(let i=0;i<100&&!cancelResponse;i++)await sleep(50);
+assert.ok(cancelResponse,'Server cancellation response must be paused');
+assert.equal(await p.eval(()=>document.querySelector('[aria-label="上传队列"]').innerText.includes('已取消')),false);
+await p.send('Fetch.continueRequest',{requestId:cancelResponse});
+await sleep(200);off();await p.send('Fetch.disable');
+await wait(p,()=>document.querySelector('[aria-label="上传队列"]')?.innerText.includes('已取消'));
+await p.eval(()=>[...document.querySelectorAll('[aria-label="上传队列"] button')].find(e=>e.textContent.trim()==='重试').click());
+await wait(p,()=>!document.querySelector('[aria-label="上传队列"]'));
+assert.equal(await p.eval(()=>document.querySelectorAll('[role=log] article').length),2);
+console.log('PASS cancel pending byte upload then retry completes once');
+console.log(p.consoleErrors);
+}finally{await browser.close()}

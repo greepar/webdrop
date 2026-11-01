@@ -1,0 +1,240 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --c-canvas: #f3f2ee;
+  --c-surface: #faf9f6;
+  --c-raised: #ffffff;
+  --c-ink: #2a2927;
+  --c-muted: #6b675f;
+  --c-line: #d6d1c6;
+  --c-line-strong: #b5afa2;
+  --c-accent: #4d6175;
+  --c-accent-ink: #ffffff;
+  --c-accent-soft: #e3e8ed;
+  --c-mine: #e6e9ec;
+  --c-danger: #9a4a3c;
+  --c-danger-soft: #f4e4df;
+  --c-success: #3f6247;
+  --c-success-soft: #e2ebe3;
+  --c-scrim: rgb(42 41 39 / 0.3);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --c-canvas: #1c1d1f;
+  --c-surface: #232427;
+  --c-raised: #2a2c30;
+  --c-ink: #e7e5df;
+  --c-muted: #a3a09a;
+  --c-line: #3b3e43;
+  --c-line-strong: #5b5f66;
+  --c-accent: #a9bacb;
+  --c-accent-ink: #1c1d1f;
+  --c-accent-soft: #2c343c;
+  --c-mine: #2e3136;
+  --c-danger: #e3a496;
+  --c-danger-soft: #3a2b28;
+  --c-success: #9fc4a5;
+  --c-success-soft: #2a3529;
+  --c-scrim: rgb(0 0 0 / 0.55);
+}
+
+@theme inline {
+  --font-sans: "PingFang SC", "Noto Sans SC", "Hiragino Sans GB", "Microsoft YaHei", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-raised: var(--c-raised);
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-accent: var(--c-accent);
+  --color-accent-ink: var(--c-accent-ink);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-mine: var(--c-mine);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-success: var(--c-success);
+  --color-success-soft: var(--c-success-soft);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    background-color: var(--c-canvas);
+    /* Keep the gutter reserved so locking body scroll behind a dialog never shifts the page. */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    @apply m-0 min-h-dvh bg-canvas font-sans text-ink antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* iOS Safari zooms into any focused control below 16px. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--c-accent);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--c-accent-soft);
+    color: var(--c-ink);
+  }
+
+  /* Browser surfaces belong to the design system too. */
+  input,
+  textarea {
+    caret-color: var(--c-accent);
+  }
+
+  /* Thin, theme-coloured scrollbars keep the content area quiet in both themes. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-line-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--c-line-strong);
+    border-radius: 999px;
+  }
+}
+
+@layer components {
+  /* Hand-drawn outline: slightly uneven corners, no texture or filters. */
+  .sketch {
+    border-radius: 18px 15px 20px 14px / 14px 19px 14px 18px;
+  }
+
+  .sketch-pill {
+    border-radius: 999px 22px 999px 20px / 26px 999px 22px 999px;
+  }
+
+  .anim-enter {
+    animation: wd-enter 260ms var(--ease-out) both;
+  }
+
+  .anim-fade {
+    animation: wd-fade 180ms var(--ease-out) both;
+  }
+
+  .anim-pop {
+    animation: wd-pop 220ms var(--ease-out) both;
+  }
+
+  .anim-spin {
+    animation: wd-spin 900ms linear infinite;
+  }
+
+  /* Only the tail message that just arrived fades; history and snapshot content never animate. */
+  .anim-message {
+    animation: wd-fade 120ms var(--ease-out) both;
+  }
+
+  /* In-dialog step change: forward slides in from the right, back from the left. */
+  .anim-swap[data-dir="forward"] {
+    animation: wd-swap-forward 200ms var(--ease-out) both;
+  }
+
+  .anim-swap[data-dir="back"] {
+    animation: wd-swap-back 200ms var(--ease-out) both;
+  }
+
+  .anim-title {
+    animation: wd-fade 160ms var(--ease-out) both;
+  }
+}
+
+@keyframes wd-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wd-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wd-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wd-swap-forward {
+  from { opacity: 0; transform: translateX(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wd-swap-back {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes wd-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter,
+  .anim-pop {
+    animation-name: wd-fade;
+  }
+
+  .anim-swap[data-dir] {
+    animation-name: wd-fade;
+  }
+
+  .anim-spin {
+    animation: none;
+    opacity: 0.65;
+  }
+
+  button, a, input, textarea, label, [role="progressbar"] > div {
+    transition-duration: 0s !important;
+  }
+
+  html {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Small desktop controls retain comfortable hit targets on touch devices. */
+@media (pointer: coarse) {
+  button,
+  [role="radiogroup"] label {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+}

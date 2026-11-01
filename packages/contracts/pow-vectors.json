@@ -1,0 +1,28 @@
+[
+  {
+    "input": "webdrop-pow-v1:00000000-0000-0000-0000-000000000000:0123456789abcdef:",
+    "nonce": "316",
+    "difficulty": 8,
+    "sha256": "00fd64da173c088a1739d9cbb65c2933a9037027189cfd6f620b94adbb770ac2",
+    "valid": true
+  },
+  {
+    "input": "webdrop-pow-v1:00000000-0000-0000-0000-000000000000:0123456789abcdef:",
+    "nonce": "0316",
+    "difficulty": 8,
+    "valid": false
+  },
+  {
+    "input": "webdrop-pow-v1:test:seed:",
+    "nonce": "25495",
+    "difficulty": 14,
+    "sha256": "00032abf4f203c6139cd0846626e1573564cff6751fc1a8b3bd5266855868ece",
+    "valid": true
+  },
+  {
+    "input": "webdrop-pow-v1:test:seed:",
+    "nonce": "025495",
+    "difficulty": 14,
+    "valid": false
+  }
+]

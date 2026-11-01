@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict'
+import { Browser, sleep } from './browser.mjs'
+const browser = await Browser.launch()
+try {
+  const page = await browser.newPage({ width: 390, height: 844, mobile: true })
+  await page.goto(process.env.WEBDROP_TEST_URL || 'http://127.0.0.1:5190')
+  await page.eval(async () => {
+    const { default: React } = await import('/node_modules/.vite/deps/react.js')
+    const { default: { createRoot } } = await import('/node_modules/.vite/deps/react-dom_client.js')
+    const { Dialog } = await import('/src/shared/ui/primitives.tsx')
+    const host = document.createElement('div'); document.body.append(host)
+    function Harness() {
+      const [open, setOpen] = React.useState(false)
+      const [nested, setNested] = React.useState(false)
+      return React.createElement(React.Fragment, null,
+        React.createElement('button', { id: 'dialog-trigger', onClick: () => setOpen(true) }, 'open'),
+        React.createElement(Dialog, { open, title: 'Test dialog', onClose: () => setOpen(false) }, React.createElement('button', { id: 'nested-trigger', onClick: () => setNested(true) }, 'nested')),
+        React.createElement(Dialog, { open: nested, title: 'Nested dialog', onClose: () => setNested(false) }, 'content'))
+    }
+    createRoot(host).render(React.createElement(Harness))
+  })
+  await sleep(150)
+  await page.eval(() => { const trigger = document.querySelector('#dialog-trigger'); trigger.focus(); trigger.click() })
+  await sleep(100)
+  assert.equal(await page.eval(() => document.body.style.overflow), 'hidden')
+  await page.eval(() => document.querySelector('#dialog-trigger').focus())
+  assert.equal(await page.eval(() => !!document.activeElement.closest('[role=dialog]')), true)
+  await page.eval(() => { const trigger = document.querySelector('#nested-trigger'); trigger.focus(); trigger.click() })
+  await sleep(100)
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' })
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' })
+  await sleep(100)
+  assert.equal(await page.eval(() => document.querySelectorAll('[role=dialog]').length), 1)
+  assert.equal(await page.eval(() => document.activeElement.id), 'nested-trigger')
+  assert.equal(await page.eval(() => document.body.style.overflow), 'hidden')
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' })
+  await sleep(100)
+  assert.equal(await page.eval(() => document.querySelectorAll('[role=dialog]').length), 0)
+  assert.equal(await page.eval(() => document.activeElement.id), 'dialog-trigger')
+  assert.equal(await page.eval(() => document.body.style.overflow), '')
+  await page.eval(() => document.querySelector('#dialog-trigger').click())
+  await sleep(250)
+  await page.eval(() => { const close = document.querySelector('[role=dialog] [aria-label="关闭"]'); close.click(); close.click() })
+  assert.equal(await page.eval(() => document.querySelectorAll('[role=dialog]').length), 1)
+  await sleep(200)
+  assert.equal(await page.eval(() => document.querySelectorAll('[role=dialog]').length), 0)
+  assert.equal(await page.eval(() => document.body.style.overflow), '')
+  await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+  await page.eval(() => document.querySelector('#dialog-trigger').click())
+  await sleep(50)
+  await page.eval(() => document.querySelector('[role=dialog] [aria-label="关闭"]').click())
+  await sleep(20)
+  assert.equal(await page.eval(() => document.querySelectorAll('[role=dialog]').length), 0)
+  console.log('PASS pointer exit fade and reduced-motion immediate close; nested Escape closes top dialog, restores focus, retains and releases scroll lock')
+} finally { await browser.close() }

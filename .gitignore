@@ -1,0 +1,20 @@
+.DS_Store
+**/.build/
+**/.swiftpm/
+**/Packages/
+xcuserdata/
+DerivedData/
+node_modules/
+**/dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.local
+.netrc
+coverage/
+.data/
+
+# Python HTTP contract test artifacts
+__pycache__/
+*.pyc

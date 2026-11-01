@@ -1,0 +1,23 @@
+{
+  "name": "webdrop",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @webdrop/web --",
+    "dev:web": "npm run dev --workspace @webdrop/web --",
+    "dev:api": "cd apps/api && swift run webdrop",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "npm run build --workspace @webdrop/web",
+    "build:api": "cd apps/api && swift build -j 4",
+    "check": "npm run check --workspace @webdrop/web",
+    "lint": "npm run lint --workspace @webdrop/web",
+    "test": "npm run check && npm run lint && npm run test:api",
+    "test:api": "cd apps/api && swift test -j 4"
+  }
+}
