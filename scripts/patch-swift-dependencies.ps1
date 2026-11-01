@@ -15,6 +15,21 @@ function Apply-CheckedPatch([string]$Path, [string]$Before, [string]$After) {
 # swift-crypto 5.0.3: Foundation on macOS 15 lacks Data.mutableBytes.
 # The dependency already uses the equivalent unsafe-buffer path on visionOS 1.0.
 if ($IsMacOS) {
+    # Swift 6.2 adds a SerialExecutor default witness unavailable in macOS 15.
+    # Supply the same nil (unknown) result locally instead of binding that symbol.
+    $executor = Join-Path $ScratchPath 'checkouts/swift-nio/Sources/NIOCore/EventLoop+SerialExecutor.swift'
+    $before = @'
+    @inlinable
+    public func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+'@
+    $after = @'
+    @inlinable
+    public func isIsolatingCurrentContext() -> Bool? { nil }
+
+    @inlinable
+    public func asUnownedSerialExecutor() -> UnownedSerialExecutor {
+'@
+    Apply-CheckedPatch $executor $before $after
     $path = Join-Path $ScratchPath 'checkouts/swift-crypto/Sources/CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift'
     $before = @'
             var outputSpan = output.mutableBytes
