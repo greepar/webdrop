@@ -26,6 +26,11 @@ if ($Target -eq 'auto') {
 }
 $isWindowsTarget = $Target.StartsWith('windows-')
 $isLinuxTarget = $Target.StartsWith('linux-')
+if ($isWindowsTarget) {
+    if (-not $IsWindows) { throw 'Windows targets require a native Windows runner and Swift SDK.' }
+    $expectedArchitecture = if ($Target -eq 'windows-arm64') { 'Arm64' } else { 'X64' }
+    if ($hostArchitecture -ne $expectedArchitecture) { throw "Use a native $expectedArchitecture Windows runner for $Target." }
+}
 if ($Target.StartsWith('macos-') -and -not $IsMacOS) { throw 'macOS targets require a macOS runner and its Apple SDK.' }
 if (-not (Get-Command swift -ErrorAction SilentlyContinue)) { throw 'Install a matching Swift toolchain and (for Linux targets) Static Linux SDK first. See apps/api/README.md.' }
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $projectRoot 'dist/api' }

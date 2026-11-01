@@ -29,7 +29,9 @@ if ($IsMacOS) {
     @inlinable
     public func asUnownedSerialExecutor() -> UnownedSerialExecutor {
 '@
-    Apply-CheckedPatch $executor $before $after
+    if (-not [IO.File]::ReadAllText($executor).Contains('public func isIsolatingCurrentContext() -> Bool? { nil }')) {
+        Apply-CheckedPatch $executor $before $after
+    }
     $path = Join-Path $ScratchPath 'checkouts/swift-crypto/Sources/CryptoBoringWrapper/AEAD/BoringSSLAEAD.swift'
     $before = @'
             var outputSpan = output.mutableBytes

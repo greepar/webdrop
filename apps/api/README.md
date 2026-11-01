@@ -103,14 +103,14 @@ pwsh ./scripts/build-api.ps1 -Target linux-x86_64 -Jobs 4 -KeepSymbols
 
 默认先运行前端生产构建，再把dist资源编译进同一个可执行文件；无Node/外部dist也能提供页面。`-ApiOnly`关闭嵌入，`-SkipWebBuild`使用已有dist。Linux默认裁剪ICU语言数据，`-FullICU`保留完整SDK数据；macOS使用系统库。
 
-参数：`-Target auto|linux-x86_64|linux-arm64|macos-x86_64|macos-arm64`、`-Jobs`、`-OutputDirectory`、`-KeepSymbols`、`-SkipStrip`（诊断用）。省略Target时默认为auto，在Linux/macOS选择本机平台及架构；Windows原生后端未支持，auto明确报错，尝试Linux交叉构建须显式指定linux目标并提供对应SDK。PowerShell最低7.2，Swift当前为6.4.2。
+参数：`-Target auto|linux-x86_64|linux-arm64|macos-x86_64|macos-arm64|windows-x86_64|windows-arm64`、`-Jobs`、`-OutputDirectory`、`-KeepSymbols`、`-SkipStrip`（诊断用）。省略Target时默认为auto，在Linux/macOS/Windows选择本机平台及架构；Windows目标要求匹配架构的原生Windows runner。Windows移植仍在Actions验收中，当前打包形式为exe及随附运行库的ZIP。PowerShell最低7.2，Swift当前为6.4.2。
 
 | 目标 | 构建方式 | 验证状态 |
 | --- | --- | --- |
 | linux-x86_64 | 匹配Swift版本的musl Static Linux SDK | 本机已构建并校验ELF |
 | linux-arm64 | 同一Static Linux SDK的aarch64目标 | 已交叉构建并通过架构/静态校验；未在ARM机器运行验收 |
 | macos-x86_64 / macos-arm64 | macOS runner和Apple SDK，最低macOS13 | 入口已提供，尚未在macOS验收 |
-| Windows原生服务端 | 尚未支持；不能因脚本使用pwsh就视为支持 | 当前代码/依赖需另行移植验收 |
+| windows-x86_64 / windows-arm64 | 对应架构Windows runner与Swift SDK | 移植验收中，exe+DLL ZIP，尚未实现单exe |
 
 脚本可以由pwsh运行于各主机，但交叉目标仍受工具链与SDK支持限制。macOS目标必须在macOS构建，使用系统动态库，不提供完全静态的Darwin产物。Linux目标会用纯PowerShell读取ELF，检查架构及无PT_INTERP/DT_NEEDED，不依赖readelf、grep或install。打包使用release默认优化（-O），不额外指定-Osize；Linux优先使用跨架构llvm-strip，macOS用系统strip；工具退出非零会终止任务。
 
