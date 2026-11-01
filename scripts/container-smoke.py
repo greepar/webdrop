@@ -54,6 +54,7 @@ def request(port, method, path, body=None, cookie=None):
 try:
     podman('volume', 'create', volume)
     port = start()
+    assert podman('exec', name, '/bin/cat', '/etc/alpine-release').stdout.strip() == '3.24.3'
     assert b'<html' in request(port, 'GET', '/')[2]
     assert request(port, 'GET', '/api/v1/missing')[0] == 404
     assert request(port, 'GET', '/d/missing')[0] == 404
@@ -76,7 +77,7 @@ try:
     port = start()
     status, _, payload = request(port, 'GET', '/api/v1/session', cookie=cookie)
     assert status == 200 and json.loads(payload)['data']['deviceId'] == device
-    print('PASS OCI read-only/non-root startup, embedded frontend, memory/disk HTTP, volume recovery and SIGTERM')
+    print('PASS Alpine OCI read-only/non-root startup, embedded frontend, memory/disk HTTP, volume recovery and SIGTERM')
 finally:
     podman('rm', '-f', name, check=False)
     podman('volume', 'rm', '-f', volume, check=False)

@@ -103,14 +103,13 @@ pwsh ./scripts/build-api.ps1 -Target linux-x86_64 -Jobs 4 -KeepSymbols
 
 默认先运行前端生产构建，再把dist资源编译进同一个可执行文件；无Node/外部dist也能提供页面。`-ApiOnly`关闭嵌入，`-SkipWebBuild`使用已有dist。Linux默认裁剪ICU语言数据，`-FullICU`保留完整SDK数据；macOS使用系统库。
 
-参数：`-Target auto|linux-x86_64|linux-arm64|macos-x86_64|macos-arm64|windows-x86_64|windows-arm64`、`-Jobs`、`-OutputDirectory`、`-KeepSymbols`、`-SkipStrip`（诊断用）。省略Target时默认为auto，在Linux/macOS/Windows选择本机平台及架构；Windows目标要求匹配架构的原生Windows runner。Windows移植仍在Actions验收中，当前打包形式为exe及随附运行库的ZIP。PowerShell最低7.2，Swift当前为6.4.2。
+参数：`-Target auto|linux-x86_64|linux-arm64|macos-x86_64|macos-arm64`、`-Jobs`、`-OutputDirectory`、`-KeepSymbols`、`-SkipStrip`（诊断用）。省略Target时默认为auto，在Linux/macOS选择本机平台及架构。主线不修改第三方依赖源码；Windows尝试已移至[独立归档分支](https://github.com/greepar/webdrop/tree/archive/windows-port-2026-11-01)，不参与主线构建或发布。PowerShell最低7.2，Swift当前为6.4.2。
 
 | 目标 | 构建方式 | 验证状态 |
 | --- | --- | --- |
 | linux-x86_64 | 匹配Swift版本的musl Static Linux SDK | 本机已构建并校验ELF |
 | linux-arm64 | 同一Static Linux SDK的aarch64目标 | 已交叉构建并通过架构/静态校验；未在ARM机器运行验收 |
 | macos-x86_64 / macos-arm64 | macOS runner和Apple SDK，最低macOS26（当前构建的系统运行时要求） | 双架构单文件均已通过52项测试及真实HTTP/SSE停机恢复 |
-| windows-x86_64 / windows-arm64 | 对应架构Windows runner与Swift SDK | 移植验收中，exe+DLL ZIP，尚未实现单exe |
 
 脚本可以由pwsh运行于各主机，但交叉目标仍受工具链与SDK支持限制。macOS目标必须在macOS构建，使用系统动态库，不提供完全静态的Darwin产物。Linux目标会用纯PowerShell读取ELF，检查架构及无PT_INTERP/DT_NEEDED，不依赖readelf、grep或install。打包使用release默认优化（-O），不额外指定-Osize；Linux优先使用跨架构llvm-strip，macOS用系统strip；工具退出非零会终止任务。
 
@@ -178,7 +177,7 @@ python3 scripts/api-shutdown-smoke.py --binary dist/api/webdrop-linux-x86_64 --v
 
 ## OCI容器与GHCR
 
-`Containerfile`使用scratch及Linux静态内嵌程序，默认非root（65532）、8080端口、DATA_DIR=/data。镜像自带只含说明的.env，容器首次启动直接运行，不进入交互配置生成流程；配置通过环境变量传入，/data挂载持久卷。可只读运行根文件系统。
+`Containerfile`使用Alpine 3.24.3底座及Linux静态内嵌程序，默认非root（65532）、8080端口、DATA_DIR=/data。镜像自带只含说明的.env，容器首次启动直接运行，不进入交互配置生成流程；配置通过环境变量传入，/data挂载持久卷。可只读运行根文件系统。
 
 本机验证：
 
@@ -191,4 +190,4 @@ podman run -d --name webdrop --read-only --cap-drop=all --security-opt=no-new-pr
 
 首次访问http://localhost:8080；局域网通过主机实际IP访问。反代HTTPS沿用Host/X-Forwarded-Proto约定，生产加`-e VAPOR_ENV=production`不能代替程序CLI；请在镜像名后指定`serve --env production`。持久卷保存状态/磁盘文件；内存文件仍会随进程退出失效。宿主目录绑定挂载需确保UID65532可写，命名卷由Podman初始化目录权限。
 
-Actions的OCI任务只依赖两个Linux构建，下载本次二进制Artifacts，构建linux/amd64+linux/arm64清单并运行容器HTTP/卷恢复验收。手动构建成功后推送`ghcr.io/greepar/webdrop:sha-<12位提交>`；版本标签触发时另推版本号及latest。已实测发布与匿名拉取`ghcr.io/greepar/webdrop:sha-bf52cc33d2ae`，amd64/arm64清单存在，amd64容器验收通过；ARM64运行仍需相应机器。尚未发布版本标签或latest，实际任务状态见GitHub Actions。Windows/macOS仍由各自任务验收，不影响Linux镜像路径。
+Actions的OCI任务只依赖两个Linux构建，下载本次二进制Artifacts，构建linux/amd64+linux/arm64清单并运行容器HTTP/卷恢复验收。手动构建成功后推送`ghcr.io/greepar/webdrop:sha-<12位提交>`；版本标签触发时另推版本号及latest。已实测发布与匿名拉取`ghcr.io/greepar/webdrop:sha-bf52cc33d2ae`，amd64/arm64清单存在，amd64容器验收通过；ARM64运行仍需相应机器。尚未发布版本标签或latest，实际任务状态见GitHub Actions。macOS双架构由独立任务验收。新的Alpine镜像以本轮Actions发布的SHA标签为准；上面的旧SHA为此前scratch镜像的验收记录。

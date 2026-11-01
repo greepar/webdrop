@@ -1,7 +1,7 @@
 #Requires -Version 7.2
 [CmdletBinding()]
 param(
-    [ValidateSet('auto', 'linux-x86_64', 'linux-arm64', 'macos-x86_64', 'macos-arm64', 'windows-x86_64', 'windows-arm64')]
+    [ValidateSet('auto', 'linux-x86_64', 'linux-arm64', 'macos-x86_64', 'macos-arm64')]
     [string]$Target = 'auto',
     [ValidateRange(1, 256)]
     [int]$Jobs = 4,
@@ -19,18 +19,13 @@ $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $apiDirectory = Join-Path $projectRoot 'apps/api'
+if ($IsWindows) { throw 'Build the supported Linux/macOS targets on Linux or macOS.' }
 $hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 if ($Target -eq 'auto') {
     $architecture = if ($hostArchitecture -eq 'Arm64') { 'arm64' } elseif ($hostArchitecture -eq 'X64') { 'x86_64' } else { throw "Unsupported host architecture: $hostArchitecture" }
-    $Target = if ($IsWindows) { "windows-$architecture" } elseif ($IsMacOS) { "macos-$architecture" } else { "linux-$architecture" }
+    $Target = if ($IsMacOS) { "macos-$architecture" } else { "linux-$architecture" }
 }
-$isWindowsTarget = $Target.StartsWith('windows-')
 $isLinuxTarget = $Target.StartsWith('linux-')
-if ($isWindowsTarget) {
-    if (-not $IsWindows) { throw 'Windows targets require a native Windows runner and Swift SDK.' }
-    $expectedArchitecture = if ($Target -eq 'windows-arm64') { 'Arm64' } else { 'X64' }
-    if ($hostArchitecture -ne $expectedArchitecture) { throw "Use a native $expectedArchitecture Windows runner for $Target." }
-}
 if ($Target.StartsWith('macos-') -and -not $IsMacOS) { throw 'macOS targets require a macOS runner and its Apple SDK.' }
 if (-not (Get-Command swift -ErrorAction SilentlyContinue)) { throw 'Install a matching Swift toolchain and (for Linux targets) Static Linux SDK first. See apps/api/README.md.' }
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $projectRoot 'dist/api' }
@@ -41,7 +36,7 @@ $options = @('--package-path', $apiDirectory, '--scratch-path', (Join-Path $apiD
 if ($isLinuxTarget) {
     $sdk = if ($Target -eq 'linux-arm64') { 'aarch64-swift-linux-musl' } else { 'x86_64-swift-linux-musl' }
     $options += @('--build-system', 'native', '--swift-sdk', $sdk)
-} elseif (-not $isWindowsTarget) {
+} else {
     $triple = if ($Target -eq 'macos-arm64') { 'arm64-apple-macosx26.0' } else { 'x86_64-apple-macosx26.0' }
     $options += @('--triple', $triple)
 }
@@ -52,7 +47,7 @@ if (-not $ApiOnly) {
 }
 
 $icuProfile = $null
-$icuMode = if ($isLinuxTarget) { 'full' } elseif ($isWindowsTarget) { 'runtime' } else { 'system' }
+$icuMode = if ($isLinuxTarget) { 'full' } else { 'system' }
 if ($isLinuxTarget -and -not $FullICU) {
     if (-not $IcuArchive) {
         # Ask Swift for this toolchain's installed SDK configuration instead of guessing $HOME paths.
@@ -117,14 +112,13 @@ function Assert-StaticElf([string]$Path, [string]$TargetName) {
 $scratchPath = Join-Path $apiDirectory ".build/$scratchName"
 & swift package --package-path $apiDirectory --scratch-path $scratchPath resolve --force-resolved-versions
 if ($LASTEXITCODE -ne 0) { throw 'Dependency resolution failed.' }
-& (Join-Path $PSScriptRoot 'patch-swift-dependencies.ps1') -ScratchPath $scratchPath
 
 Write-Host "Building $Target"
 & swift build @options
 if ($LASTEXITCODE -ne 0) { throw "Swift build failed ($LASTEXITCODE)." }
 $binOutput = @(& swift build @options --show-bin-path)
 if ($LASTEXITCODE -ne 0 -or $binOutput.Count -ne 1) { throw 'Unable to determine Swift build output directory.' }
-$binary = Join-Path $binOutput[0].Trim() $(if ($isWindowsTarget) { 'webdrop.exe' } else { 'webdrop' })
+$binary = Join-Path $binOutput[0].Trim() 'webdrop'
 if ($isLinuxTarget) { Assert-StaticElf $binary $Target }
 $null = New-Item -ItemType Directory -Force -Path $OutputDirectory
 $artifact = Join-Path $OutputDirectory "webdrop-$Target"
@@ -134,11 +128,9 @@ if ($KeepSymbols) {
     Copy-Item -LiteralPath $binary -Destination (Join-Path $symbols "webdrop-$Target.unstripped") -Force
 }
 Copy-Item -LiteralPath $binary -Destination $artifact -Force
-if (-not $IsWindows) {
-    & chmod 755 $artifact
-    if ($LASTEXITCODE -ne 0) { throw 'Unable to make output executable.' }
-}
-if (-not $SkipStrip -and -not $isWindowsTarget) {
+& chmod 755 $artifact
+if ($LASTEXITCODE -ne 0) { throw 'Unable to make output executable.' }
+if (-not $SkipStrip) {
     $tool = if ($isLinuxTarget) { Get-Command llvm-strip, strip -ErrorAction SilentlyContinue | Select-Object -First 1 } else { Get-Command strip -ErrorAction SilentlyContinue }
     if (-not $tool) { throw 'Install llvm-strip (recommended for Linux cross targets) or use -SkipStrip for diagnostic builds.' }
     $stripOptions = if ($isLinuxTarget) { @('--strip-unneeded', $artifact) } else { @('-S', '-x', $artifact) }
@@ -146,42 +138,6 @@ if (-not $SkipStrip -and -not $isWindowsTarget) {
     if ($LASTEXITCODE -ne 0) { throw "strip failed ($LASTEXITCODE)." }
 }
 if ($isLinuxTarget) { Assert-StaticElf $artifact $Target }
-if ($isWindowsTarget) {
-    $bundle = Join-Path $OutputDirectory $Target
-    if (Test-Path -LiteralPath $bundle) { Remove-Item -LiteralPath $bundle -Recurse -Force }
-    $null = New-Item -ItemType Directory -Force -Path $bundle
-    Copy-Item $binary (Join-Path $bundle 'webdrop.exe') -Force
-    $targetInfo = (& swift -print-target-info | Out-String | ConvertFrom-Json)
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot query Swift runtime paths' }
-    $runtimePaths = @($targetInfo.paths.runtimeLibraryPaths) + @((Split-Path (Get-Command swift).Source))
-    # Windows SDK DLLs live in usr/bin, separate from the compiler and import libraries.
-    if ($env:SDKROOT) { $runtimePaths += Join-Path $env:SDKROOT 'usr/bin' }
-    # Use Visual Studio's redistributable CRT, rather than assuming the user's
-    # Windows installation has the same developer runtime as a hosted runner.
-    $vswhere = if (${env:ProgramFiles(x86)}) { Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe' } else { $null }
-    if ($vswhere -and (Test-Path -LiteralPath $vswhere)) {
-        $visualStudio = (& $vswhere -latest -products '*' -property installationPath | Select-Object -First 1)
-        if ($visualStudio) {
-            $redist = Join-Path $visualStudio 'VC/Redist/MSVC'
-            $crtArch = if ($Target -eq 'windows-arm64') { 'arm64' } else { 'x64' }
-            foreach ($version in Get-ChildItem $redist -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending) {
-                $architectureDirectory = Join-Path $version.FullName $crtArch
-                if (Test-Path $architectureDirectory) {
-                    $runtimePaths += @(Get-ChildItem $architectureDirectory -Directory -Filter 'Microsoft.VC*.CRT' | ForEach-Object { $_.FullName })
-                }
-            }
-        }
-    }
-    $searchPaths = [Collections.Generic.List[string]]::new()
-    foreach ($path in $runtimePaths) {
-        $searchPaths.Add($path)
-        $searchPaths.Add((Join-Path (Split-Path $path -Parent) 'bin'))
-    }
-    & (Join-Path $PSScriptRoot 'bundle-windows-runtime.ps1') -Binary $binary -Destination $bundle -RuntimeDirectories $searchPaths.ToArray() -Architecture $Target.Substring('windows-'.Length)
-    Copy-Item (Join-Path $projectRoot 'LICENSE') $bundle -Force
-    $artifact = Join-Path $OutputDirectory "webdrop-$Target.zip"
-    Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath $artifact -Force
-}
 $metadata = [ordered]@{
     target = $Target; file = [IO.Path]::GetFileName($artifact)
     bytes = (Get-Item -LiteralPath $artifact).Length
@@ -190,7 +146,7 @@ $metadata = [ordered]@{
     icuMode = $icuMode
     icu = if ($icuProfile) { $icuProfile } else { $null }
     linkerArguments = @($ExtraLinkerArguments)
-    fullyStatic = $isLinuxTarget; stripped = -not $SkipStrip -and -not $isWindowsTarget
+    fullyStatic = $isLinuxTarget; stripped = -not $SkipStrip
     swiftVersion = ((& swift --version) -join "`n")
 }
 if ($LASTEXITCODE -ne 0) { throw 'Unable to query Swift version.' }
