@@ -95,3 +95,16 @@ if ($IsWindows) {
         [IO.File]::WriteAllText($date, $dateText.Substring(0, $position) + "// WebDrop Windows RFC1123 cache`n#if os(Windows)`n$windows`n#else`n" + $dateText.Substring($position) + "`n#endif`n")
     }
 }
+
+if ($IsWindows) {
+    $vapor = Join-Path $ScratchPath 'checkouts/vapor/Sources/Vapor'
+    Copy-Item (Join-Path $PSScriptRoot 'patches/windows-console.swift') (Join-Path $vapor 'Commands/WebDropWindowsConsole.swift') -Force
+    $serve = Join-Path $vapor 'Commands/ServeCommand.swift'
+    $text = [IO.File]::ReadAllText($serve).Replace("`r`n", "`n")
+    if (-not $text.Contains('WebDropWindowsConsole.install')) {
+        Apply-CheckedPatch $serve '        var signalSources: [DispatchSourceSignal]' "        var signalSources: [DispatchSourceSignal]`n        var windowsConsoleToken: UUID? = nil"
+        Apply-CheckedPatch $serve '        // setup signal sources for shutdown' "        #if os(Windows)`n        box.windowsConsoleToken = try WebDropWindowsConsole.install { promise.succeed(()) }`n        #else`n        // setup signal sources for shutdown"
+        Apply-CheckedPatch $serve '        makeSignalSource(SIGINT)' "        makeSignalSource(SIGINT)`n        #endif"
+        Apply-CheckedPatch $serve '        box.signalSources = []' "        box.signalSources = []`n        #if os(Windows)`n        WebDropWindowsConsole.remove(box.windowsConsoleToken)`n        box.windowsConsoleToken = nil`n        #endif"
+    }
+}

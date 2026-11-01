@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -46,7 +47,12 @@ with tempfile.TemporaryDirectory(prefix='webdrop-windows-') as temporary:
             with urllib.request.urlopen(request) as response:
                 assert response.status == 201
                 assert json.load(response)['data']['csrfToken']
-            print('PASS Windows packaged exe, first launch, frontend and API session with isolated DLL PATH')
+            for size in (200000, 2000000):
+                subprocess.run([
+                    sys.executable, str(Path(__file__).with_name('api-smoke.py').resolve()),
+                    '--url', origin, '--file-bytes', str(size),
+                ], env=environment, check=True, timeout=120)
+            print('PASS Windows packaged exe, first launch, frontend, permissions, SSE and memory/disk upload with isolated DLL PATH')
         finally:
             process.terminate()
             process.wait(timeout=10)

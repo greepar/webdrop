@@ -153,13 +153,14 @@ if ($isWindowsTarget) {
     $targetInfo = (& swift -print-target-info | Out-String | ConvertFrom-Json)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot query Swift runtime paths' }
     $runtimePaths = @($targetInfo.paths.runtimeLibraryPaths) + @((Split-Path (Get-Command swift).Source))
+    # Windows SDK DLLs live in usr/bin, separate from the compiler and import libraries.
+    if ($env:SDKROOT) { $runtimePaths += Join-Path $env:SDKROOT 'usr/bin' }
+    $searchPaths = [Collections.Generic.List[string]]::new()
     foreach ($path in $runtimePaths) {
-        if (Test-Path $path) {
-            Get-ChildItem $path -Filter '*.dll' -File -Recurse | ForEach-Object { Copy-Item $_.FullName $bundle -Force }
-            $siblingBin = Join-Path (Split-Path $path -Parent) 'bin'
-            if (Test-Path $siblingBin) { Get-ChildItem $siblingBin -Filter '*.dll' -File | ForEach-Object { Copy-Item $_.FullName $bundle -Force } }
-        }
+        $searchPaths.Add($path)
+        $searchPaths.Add((Join-Path (Split-Path $path -Parent) 'bin'))
     }
+    & (Join-Path $PSScriptRoot 'bundle-windows-runtime.ps1') -Binary $binary -Destination $bundle -RuntimeDirectories $searchPaths.ToArray() -Architecture $Target.Substring('windows-'.Length)
     Copy-Item (Join-Path $projectRoot 'LICENSE') $bundle -Force
     $artifact = Join-Path $OutputDirectory "webdrop-$Target.zip"
     Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath $artifact -Force
