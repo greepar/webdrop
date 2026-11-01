@@ -113,3 +113,5 @@
 
 - [x] run41305254162的macOS ARM64单文件（约23.3MB）已在macOS26通过52项测试、契约检查、真实SSE、SIGINT/SIGTERM及重启身份恢复。Intel尚在构建。run41305316717的Linux双架构及GHCR再次全部通过，发布sha-bf52cc33d2ae。
 - Windows继续修复WebSocketKit的Unix socket选项；添加原生Console中断处理避免未实现的Dispatch信号源，DLL按PE普通/延迟导入递归收集并验证架构/缺失依赖，额外收集对应架构VC++可再发行CRT。PE依赖链、延迟导入、架构错误与缺失DLL本机验证通过；原生Windows运行仍待CI。
+
+- [x] run41305254162的macOS Intel同样通过52项测试、契约、真实SSE、SIGINT/SIGTERM及重启恢复，单文件约24.8MB；macOS两架构全部通过。

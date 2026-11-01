@@ -63,7 +63,7 @@ if ($IsWindows) {
     foreach ($name in @('String+IsIPAddress', 'DotEnv', 'DirectoryConfiguration')) {
         $path = Join-Path $vapor "Utilities/$name.swift"
         $before = if ($name -eq 'DirectoryConfiguration') { "#else`nimport Darwin.C" } else { "#else`nimport Darwin" }
-        $after = "#elseif os(Windows)`nimport WinSDK`nimport ucrt`n$before"
+        $after = "#elseif os(Windows)`nimport Foundation`nimport WinSDK`nimport ucrt`n$before"
         # This insertion retains the original else clause; check its marker first.
         if (-not [IO.File]::ReadAllText($path).Contains('import WinSDK')) { Apply-CheckedPatch $path $before $after }
     }

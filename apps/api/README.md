@@ -109,7 +109,7 @@ pwsh ./scripts/build-api.ps1 -Target linux-x86_64 -Jobs 4 -KeepSymbols
 | --- | --- | --- |
 | linux-x86_64 | 匹配Swift版本的musl Static Linux SDK | 本机已构建并校验ELF |
 | linux-arm64 | 同一Static Linux SDK的aarch64目标 | 已交叉构建并通过架构/静态校验；未在ARM机器运行验收 |
-| macos-x86_64 / macos-arm64 | macOS runner和Apple SDK，最低macOS26（当前构建的系统运行时要求） | ARM64单文件已通过52项测试及真实HTTP/SSE停机恢复；Intel验收中 |
+| macos-x86_64 / macos-arm64 | macOS runner和Apple SDK，最低macOS26（当前构建的系统运行时要求） | 双架构单文件均已通过52项测试及真实HTTP/SSE停机恢复 |
 | windows-x86_64 / windows-arm64 | 对应架构Windows runner与Swift SDK | 移植验收中，exe+DLL ZIP，尚未实现单exe |
 
 脚本可以由pwsh运行于各主机，但交叉目标仍受工具链与SDK支持限制。macOS目标必须在macOS构建，使用系统动态库，不提供完全静态的Darwin产物。Linux目标会用纯PowerShell读取ELF，检查架构及无PT_INTERP/DT_NEEDED，不依赖readelf、grep或install。打包使用release默认优化（-O），不额外指定-Osize；Linux优先使用跨架构llvm-strip，macOS用系统strip；工具退出非零会终止任务。
