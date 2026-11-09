@@ -175,13 +175,13 @@ export function MessageList({ items, members, selfMemberId, isOwner, freshIds = 
             const sender = memberName.get(item.senderMemberId) ?? '成员'
             return (
               <li key={item.id} data-item-id={item.id} className={`flex w-full ${freshIds.includes(item.id) ? 'anim-message' : ''} ${mine ? 'justify-end' : 'justify-start'}`}>
-                <article className={`message-bubble group flex max-w-[min(34rem,88%)] flex-col gap-1.5 ${mine ? 'items-end' : 'items-start'}`}>
+                <article className={`message-bubble group flex min-w-0 max-w-[min(34rem,88%)] flex-col gap-1.5 ${mine ? 'items-end' : 'items-start'}`}>
                   <header className="flex items-center gap-2 px-1 text-xs text-muted">
                     <span className="font-medium text-ink">{mine ? '我' : sender}</span>
                     <time dateTime={item.createdAt}>{formatTime(item.createdAt)}</time>
                   </header>
                   {item.kind === 'text' ? (
-                    <div className={`sketch border px-4 py-3 text-[15px] leading-7 whitespace-pre-wrap break-words [overflow-wrap:anywhere] ${mine ? 'border-line-strong bg-mine' : 'border-line bg-raised'}`}>
+                    <div className={`sketch min-w-0 max-w-full border px-4 py-3 text-[15px] leading-7 whitespace-pre-wrap [overflow-wrap:anywhere] ${mine ? 'border-line-strong bg-mine' : 'border-line bg-raised'}`}>
                       {item.text ?? ''}
                     </div>
                   ) : isAssetItem(item) ? (
